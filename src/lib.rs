@@ -51,12 +51,12 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
 
     fn push_back(&mut self, element: T) {
         if self.end < self.capacity() {
-            let next_idx = self.length();
+            let item_index = self.end;
             let slice = unsafe {
                 (*self.array.as_mut_ptr()).as_mut_slice()
             };
             unsafe {
-                ptr::write(&mut slice[next_idx], element);
+                ptr::write(&mut slice[item_index], element);
             }
             self.end += 1;
         } else {
@@ -66,12 +66,12 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
 
     fn push_front(&mut self, element: T) {
         if self.begining != 0 {
-            let index = self.begining - 1;
+            let item_index = self.begining - 1;
             let slice = unsafe {
                 (*self.array.as_mut_ptr()).as_mut_slice()
             };
             unsafe {
-                ptr::write(&mut slice[index], element);
+                ptr::write(&mut slice[item_index], element);
             }
             self.begining -= 1;
         } else {
@@ -83,10 +83,10 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
         if self.is_empty() {
             None
         } else {
-            let last_idx = self.length() - 1;
+            let item_index = self.end - 1;
             let item = unsafe {
                 let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(&slice[last_idx])
+                ptr::read(&slice[item_index])
             };
             self.end -= 1;
             Some(item)
@@ -97,10 +97,10 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
         if self.is_empty() {
             None
         } else {
-            let pop_index = self.begining;
+            let item_index = self.begining;
             let item = unsafe {
                 let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(&slice[pop_index])
+                ptr::read(&slice[item_index])
             };
             self.begining += 1;
             Some(item)
