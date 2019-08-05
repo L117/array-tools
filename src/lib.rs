@@ -57,7 +57,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
                 (*self.array.as_mut_ptr()).as_mut_slice()
             };
             unsafe {
-                ptr::write(&mut slice[item_index], element);
+                ptr::write(slice.get_unchecked_mut(item_index), element);
             }
             self.end += 1;
         } else {
@@ -65,6 +65,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
         }
     }
 
+    #[allow(dead_code)]
     fn push_front(&mut self, element: T) {
         if self.begining != 0 {
             let item_index = self.begining - 1;
@@ -72,7 +73,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
                 (*self.array.as_mut_ptr()).as_mut_slice()
             };
             unsafe {
-                ptr::write(&mut slice[item_index], element);
+                ptr::write(slice.get_unchecked_mut(item_index), element);
             }
             self.begining -= 1;
         } else {
@@ -87,7 +88,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
             let item_index = self.end - 1;
             let item = unsafe {
                 let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(&slice[item_index])
+                ptr::read(slice.get_unchecked(item_index))
             };
             self.end -= 1;
             Some(item)
@@ -101,7 +102,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
             let item_index = self.begining;
             let item = unsafe {
                 let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(&slice[item_index])
+                ptr::read(slice.get_unchecked(item_index))
             };
             self.begining += 1;
             Some(item)
