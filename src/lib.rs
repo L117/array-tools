@@ -1,8 +1,9 @@
+#![no_std]
 #![feature(fixed_size_array)]
-use std::array::FixedSizeArray;
-use std::mem::MaybeUninit;
-use std::marker::PhantomData;
-use std::{ptr, mem};
+use core::array::FixedSizeArray;
+use core::mem::MaybeUninit;
+use core::marker::PhantomData;
+use core::{ptr, mem};
 
 struct FixedCapacityDequeLike<T, A: FixedSizeArray<T>> {
     array: MaybeUninit<A>,
