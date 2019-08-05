@@ -4,3 +4,4 @@ A little collection of array-related utils aiming to make life easier. Requires 
 
 ## Features
 - Fixed-size array (of arbitrary size) initialization with iterator.
+- Fixed-size array (of arbitrary size) by-value "into" iterator.

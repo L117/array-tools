@@ -170,6 +170,69 @@ where
     }
 }
 
+/// A by-value iterator over array.
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// use array_tools;
+/// 
+/// // Notice - this struct is neither Copy not Clone.
+/// #[derive(Debug, PartialEq, Eq)]
+/// struct Foo(u32);
+/// 
+/// let array = [Foo(1), Foo(2), Foo(3)];
+/// let mut iter = array_tools::ArrayIntoIterator::new(array);
+/// assert_eq!(iter.next(), Some(Foo(1)));
+/// assert_eq!(iter.next(), Some(Foo(2)));
+/// assert_eq!(iter.next(), Some(Foo(3)));
+/// assert_eq!(iter.next(), None);
+/// ```
+pub struct ArrayIntoIterator<T, A: FixedSizeArray<T>> {
+    deque: FixedCapacityDequeLike<T, A>
+}
+
+impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
+    pub fn new(array: A) -> ArrayIntoIterator<T, A> {
+        ArrayIntoIterator {
+            deque: FixedCapacityDequeLike::from_array(array),
+        }
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> Iterator for ArrayIntoIterator<T, A> {
+    type Item = T;
+    
+    fn next(&mut self) -> Option<T> {
+        self.deque.pop_front()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.deque.length(), Some(self.deque.length()))
+    }
+
+    fn count(self) -> usize {
+        self.deque.length()
+    }
+
+    fn last(mut self) -> Option<T> {
+        self.deque.pop_back()
+    }
+
+    fn nth(&mut self, mut nth: usize) -> Option<T> {
+        while nth > 0 {
+            mem::drop(self.deque.pop_front());
+            nth -= 1;
+        }
+        self.deque.pop_front()
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> DoubleEndedIterator for ArrayIntoIterator<T, A> {
+    fn next_back(&mut self) -> Option<T> {
+        self.deque.pop_back()
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -189,5 +252,76 @@ mod test {
     fn too_many_items() {
         let maybe_array: Option<[u32; 5]> = super::try_init_from_iterator(1..=100);
         assert_eq!(maybe_array, Some([1, 2, 3, 4, 5]));
+    }
+
+    #[test]
+    fn array_into_iterator() {
+        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]);
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), Some(2));
+        assert_eq!(iter.next(), Some(3));
+        assert_eq!(iter.next(), Some(4));
+        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn array_into_iterator_reverse() {
+        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]).rev();
+        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next(), Some(4));
+        assert_eq!(iter.next(), Some(3));
+        assert_eq!(iter.next(), Some(2));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn array_into_iterator_take_from_two_sides() {
+        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]);
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next_back(), Some(5));
+        assert_eq!(iter.next(), Some(2));
+        assert_eq!(iter.next_back(), Some(4));
+        assert_eq!(iter.next(), Some(3));
+        assert_eq!(iter.next_back(), None);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn array_into_iterator_next() {
+        let array = [1, 2, 3, 4, 5, 6, 7];
+        let mut iter = super::ArrayIntoIterator::new(array);
+        assert_eq!(iter.next(), Some(1));
+    }
+
+    #[test]
+    fn array_into_iterator_size_hint() {
+        let array = [1, 2, 3, 4, 5, 6, 7];
+        let mut iter = super::ArrayIntoIterator::new(array);
+        assert_eq!(iter.size_hint(), (7, Some(7)));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.size_hint(), (6, Some(6)));
+    }
+
+    #[test]
+    fn array_into_iterator_count() {
+        let array = [1, 2, 3, 4, 5, 6, 7];
+        let iter = super::ArrayIntoIterator::new(array);
+        assert_eq!(iter.count(), 7);
+    }
+
+    #[test]
+    fn array_into_iterator_last() {
+        let array = [1, 2, 3, 4, 5, 6, 7];
+        let iter = super::ArrayIntoIterator::new(array);
+        assert_eq!(iter.last(), Some(7));
+    }
+
+    #[test]
+    fn array_into_iterator_nth() {
+        let array = [1, 2, 3, 4, 5, 6, 7];
+        let mut iter = super::ArrayIntoIterator::new(array);
+        assert_eq!(iter.nth(5), Some(6));
     }
 }
