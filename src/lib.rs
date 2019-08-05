@@ -179,7 +179,7 @@ where
 /// ```rust
 /// use array_tools;
 /// 
-/// // Notice - this struct is neither Copy not Clone.
+/// // Notice - this struct is neither Copy nor Clone.
 /// #[derive(Debug, PartialEq, Eq)]
 /// struct Foo(u32);
 /// 
