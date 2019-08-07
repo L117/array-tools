@@ -10,6 +10,7 @@ license = "Apache-2.0 OR MIT"
 keywords = ["array", "no_std"]
 categories = ["no-std"]
 exclude = ["/.travis.yml", ".gitignore"]
+readme = "/README.md"
 
 [badges]
 travis-ci = { repository = "L117/array-tools", branch = "master" }
