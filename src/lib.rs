@@ -158,13 +158,13 @@ where
     A: FixedSizeArray<T>,
     I: Iterator<Item = T>,
 {
-    let mut vec = FixedCapacityDequeLike::new();
+    let mut deque = FixedCapacityDequeLike::new();
     loop {
-        if vec.is_full() {
-            break vec.try_extract_array();
+        if deque.is_full() {
+            break deque.try_extract_array();
         } else {
             if let Some(item) = iter.next() {
-                vec.push_back(item)
+                deque.push_back(item)
             } else {
                 break None;
             }
