@@ -1,3 +1,83 @@
+//! # Array Tools
+//! 
+//! A little collection of array-related utils aiming to make life easier. 
+//! 
+//! 
+//! ## Stability warning
+//! 
+//! Requires nightly.
+//! 
+//! Consider this crate experimental. Some (all?) of currently provided features 
+//! are most likely will be integrated into `rust`'s core/std library sooner or 
+//! later, and with arrival of const generics public interfaces are most likely 
+//! will be changed.
+//! 
+//! ## Features
+//! 
+//! - **Metafeature:** all features below should work for arrays of **any** size.
+//! - Array initialization with iterator.
+//! - Array initizlization with function (without or without index passed as 
+//!   argument).
+//! - Array by-value "into" iterator.
+//! - No dependency on `std` and no heap allocations.
+//! 
+//! ## Examples
+//! 
+//! ```rust
+//! use array_tools::{self, ArrayIntoIterator};
+//! 
+//! 
+//! // Array initialization with iterator.
+//! let array1: [u64; 7] = 
+//!     array_tools::try_init_from_iterator(0u64..17).unwrap();
+//! 
+//! assert_eq!(array1, [0, 1, 2, 3, 4, 5, 6]);
+//! 
+//! 
+//! // Array initialization with function (w/o index).
+//! let mut value = 0u64;
+//! 
+//! let array2: [u64; 7] = array_tools::init_with(|| {
+//!     let tmp = value;
+//!     value += 1;
+//!     tmp
+//! });
+//! 
+//! assert_eq!(array2, [0, 1, 2, 3, 4, 5, 6]);
+//! 
+//! 
+//! // Array initialization with function (w/ index).
+//! let array3: [u64; 7] = array_tools::indexed_init_with(|idx| {
+//!     idx as u64
+//! });
+//! 
+//! assert_eq!(array3, [0, 1, 2, 3, 4, 5, 6]);
+//! 
+//! 
+//! // Array by-value iterator.
+//! #[derive(Debug, PartialEq, Eq)]
+//! struct NonCopyable(u64);
+//! 
+//! let array4: [NonCopyable; 7] = 
+//!     array_tools::indexed_init_with(|idx| NonCopyable(idx as u64));
+//! 
+//! let iter = ArrayIntoIterator::new(array4);
+//! 
+//! let array5: [NonCopyable; 7] = 
+//!     array_tools::try_init_from_iterator(iter).unwrap();
+//! 
+//! assert_eq!(array5, [
+//!     NonCopyable(0),
+//!     NonCopyable(1),
+//!     NonCopyable(2),
+//!     NonCopyable(3),
+//!     NonCopyable(4),
+//!     NonCopyable(5),
+//!     NonCopyable(6),
+//! ]);
+//! ```
+
+
 #![no_std]
 #![feature(fixed_size_array)]
 use core::array::FixedSizeArray;
@@ -131,27 +211,24 @@ impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
     }
 }
 
-/// Attempts to initialize fixed-length array from iterator.
+/// Attempts to initialize array with iterator.
 /// 
 /// # Examples
 /// ```rust
 /// use array_tools;
 /// 
-/// // Attempt to initialize array with iterator yielding not enough items will result in returning
-/// // `None`. All taken items will be dropped.
-/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(1..=4);
+/// // If iterator yields less items than array capacity, this function will return `None`.
+/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..4);
 /// assert_eq!(maybe_array, None);
 /// 
-/// // Attempt to initialize array with iterator yielding number of items equal to array length
-/// // will result in returning `Some` containing array.
-/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(1..=5);
-/// assert_eq!(maybe_array, Some([1, 2, 3, 4, 5]));
+/// // If iterator yields just enough items to fill array, this function will `Some(array)`.
+/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..5);
+/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
 /// 
-/// // Attempt to inititalize array with iterator yielding too many items (Mare than array can 
-/// // contain) will result in taking length-of-array items from iterator and returning `Some` 
-/// // containing array. Iterator with all remaining items will be dropped.
-/// let maybe_array: Option<[u32; 5]> = array_tools::try_init_from_iterator(1..=100);
-/// assert_eq!(maybe_array, Some([1, 2, 3, 4, 5])); 
+/// // If iterator yields more items than array capacity, only required amount of items will be
+/// // taken, function will return `Some(array)`.
+/// let maybe_array: Option<[u32; 5]> = array_tools::try_init_from_iterator(0..100);
+/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4])); 
 /// ```
 pub fn try_init_from_iterator<T, A, I>(mut iter: I) -> Option<A>
 where
