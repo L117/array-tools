@@ -172,6 +172,57 @@ where
     }
 }
 
+/// Initializes array with values provided by function.
+///
+/// ```rust
+/// use array_tools;
+/// 
+/// let mut value: u64 = 0;
+/// let array: [u64; 7] = array_tools::init_with(|| {
+///     let return_value = value;
+///     value += 1;
+///     return_value
+/// });
+/// 
+/// assert_eq!(array, [0, 1, 2, 3, 4, 5, 6]);
+/// ```
+pub fn init_with<T, A, F>(mut initializer_fn: F) -> A
+where
+    A: FixedSizeArray<T>,
+    F: FnMut() -> T,
+{
+    let mut deque = FixedCapacityDequeLike::new();
+    while !deque.is_full() {
+        deque.push_back(initializer_fn());
+    }
+    deque.try_extract_array().unwrap()
+}
+
+/// Initializes array with values provided by function (version with index as argument).
+///
+/// ```rust
+/// use array_tools;
+/// 
+/// let array: [u64; 7] = array_tools::indexed_init_with(|idx| {
+///     idx as u64 * 2
+/// });
+/// 
+/// assert_eq!(array, [0, 2, 4, 6, 8, 10, 12]);
+/// ```
+pub fn indexed_init_with<T, A, F>(mut initializer_fn: F) -> A
+where
+    A: FixedSizeArray<T>,
+    F: FnMut(usize) -> T,
+{
+    let mut deque = FixedCapacityDequeLike::new();
+    let mut idx = 0;
+    while !deque.is_full() {
+        deque.push_back(initializer_fn(idx));
+        idx += 1
+    }
+    deque.try_extract_array().unwrap()
+}
+
 /// A by-value iterator over array.
 /// 
 /// # Examples
@@ -325,5 +376,47 @@ mod test {
         let array = [1, 2, 3, 4, 5, 6, 7];
         let mut iter = super::ArrayIntoIterator::new(array);
         assert_eq!(iter.nth(5), Some(6));
+    }
+
+    #[test]
+    fn init_with_fn() {
+        fn initializer() -> u64 {
+            7
+        }
+
+        let array: [u64; 7] = super::init_with(initializer);
+
+        assert_eq!(array, [7, 7, 7, 7, 7, 7, 7]); 
+    }
+
+    #[test]
+    fn init_with_closure() {
+        let mut value = 0;
+
+        let array: [u64; 7] = super::init_with(|| {
+            let return_value = value;
+            value += 1;
+            return return_value;
+        });
+
+        assert_eq!(array, [0, 1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn indexed_init_with_fn() {
+        fn initializer(idx: usize) -> u64 {
+            (idx % 2) as u64
+        }
+
+        let array: [u64; 7] = super::indexed_init_with(initializer);
+
+        assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
+    }
+
+    #[test]
+    fn indexed_init_with_closure() {
+        let array: [u64; 7] = super::indexed_init_with(|idx| (idx % 2) as u64);
+
+        assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
 }
