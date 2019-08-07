@@ -16,7 +16,7 @@
 //! 
 //! - **Metafeature:** all features below should work for arrays of **any** size.
 //! - Array initialization with iterator.
-//! - Array initizlization with function (without or without index passed as 
+//! - Array initizlization with function (with or without index passed as 
 //!   argument).
 //! - Array by-value "into" iterator.
 //! - No dependency on `std` and no heap allocations.
