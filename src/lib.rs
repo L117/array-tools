@@ -1,71 +1,71 @@
 //! # Array Tools
-//! 
-//! A little collection of array-related utils aiming to make life easier. 
-//! 
-//! 
+//!
+//! A little collection of array-related utils aiming to make life easier.
+//!
+//!
 //! ## Stability warning
-//! 
+//!
 //! Requires nightly.
-//! 
-//! Consider this crate experimental. Some (all?) of currently provided features 
-//! are most likely will be integrated into `rust`'s core/std library sooner or 
-//! later, and with arrival of const generics public interfaces are most likely 
+//!
+//! Consider this crate experimental. Some (all?) of currently provided features
+//! are most likely will be integrated into `rust`'s core/std library sooner or
+//! later, and with arrival of const generics public interfaces are most likely
 //! will be changed.
-//! 
+//!
 //! ## Features
-//! 
+//!
 //! - **Metafeature:** all features below should work for arrays of **any** size.
 //! - Array initialization with iterator.
-//! - Array initizlization with function (with or without index passed as 
+//! - Array initizlization with function (with or without index passed as
 //!   argument).
 //! - Array by-value "into" iterator.
 //! - No dependency on `std` and no heap allocations.
-//! 
+//!
 //! ## Examples
-//! 
+//!
 //! ```rust
 //! use array_tools::{self, ArrayIntoIterator};
-//! 
-//! 
+//!
+//!
 //! // Array initialization with iterator.
-//! let array1: [u64; 7] = 
+//! let array1: [u64; 7] =
 //!     array_tools::try_init_from_iterator(0u64..17).unwrap();
-//! 
+//!
 //! assert_eq!(array1, [0, 1, 2, 3, 4, 5, 6]);
-//! 
-//! 
+//!
+//!
 //! // Array initialization with function (w/o index).
 //! let mut value = 0u64;
-//! 
+//!
 //! let array2: [u64; 7] = array_tools::init_with(|| {
 //!     let tmp = value;
 //!     value += 1;
 //!     tmp
 //! });
-//! 
+//!
 //! assert_eq!(array2, [0, 1, 2, 3, 4, 5, 6]);
-//! 
-//! 
+//!
+//!
 //! // Array initialization with function (w/ index).
 //! let array3: [u64; 7] = array_tools::indexed_init_with(|idx| {
 //!     idx as u64
 //! });
-//! 
+//!
 //! assert_eq!(array3, [0, 1, 2, 3, 4, 5, 6]);
-//! 
-//! 
+//!
+//!
 //! // Array by-value iterator.
 //! #[derive(Debug, PartialEq, Eq)]
 //! struct NonCopyable(u64);
-//! 
-//! let array4: [NonCopyable; 7] = 
+//!
+//! let array4: [NonCopyable; 7] =
 //!     array_tools::indexed_init_with(|idx| NonCopyable(idx as u64));
-//! 
+//!
 //! let iter = ArrayIntoIterator::new(array4);
-//! 
-//! let array5: [NonCopyable; 7] = 
+//!
+//! let array5: [NonCopyable; 7] =
 //!     array_tools::try_init_from_iterator(iter).unwrap();
-//! 
+//!
 //! assert_eq!(array5, [
 //!     NonCopyable(0),
 //!     NonCopyable(1),
@@ -77,19 +77,18 @@
 //! ]);
 //! ```
 
-
 #![no_std]
 #![feature(fixed_size_array)]
 use core::array::FixedSizeArray;
-use core::mem::MaybeUninit;
 use core::marker::PhantomData;
-use core::{ptr, mem};
+use core::mem::MaybeUninit;
+use core::{mem, ptr};
 
 struct FixedCapacityDequeLike<T, A: FixedSizeArray<T>> {
     array: MaybeUninit<A>,
     begining: usize,
     end: usize,
-    _element: PhantomData<T>
+    _element: PhantomData<T>,
 }
 
 impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
@@ -113,9 +112,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
     }
 
     fn capacity(&self) -> usize {
-        unsafe {
-            (*self.array.as_ptr()).as_slice().len()
-        }
+        unsafe { (*self.array.as_ptr()).as_slice().len() }
     }
 
     fn length(&self) -> usize {
@@ -133,9 +130,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
     fn push_back(&mut self, element: T) {
         if self.end < self.capacity() {
             let item_index = self.end;
-            let slice = unsafe {
-                (*self.array.as_mut_ptr()).as_mut_slice()
-            };
+            let slice = unsafe { (*self.array.as_mut_ptr()).as_mut_slice() };
             unsafe {
                 ptr::write(slice.get_unchecked_mut(item_index), element);
             }
@@ -149,9 +144,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
     fn push_front(&mut self, element: T) {
         if self.begining != 0 {
             let item_index = self.begining - 1;
-            let slice = unsafe {
-                (*self.array.as_mut_ptr()).as_mut_slice()
-            };
+            let slice = unsafe { (*self.array.as_mut_ptr()).as_mut_slice() };
             unsafe {
                 ptr::write(slice.get_unchecked_mut(item_index), element);
             }
@@ -191,9 +184,7 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
 
     fn try_extract_array(&mut self) -> Option<A> {
         if self.length() == self.capacity() {
-            let array_shallow_copy = unsafe {
-                ptr::read(self.array.as_ptr())
-            };
+            let array_shallow_copy = unsafe { ptr::read(self.array.as_ptr()) };
             self.begining = 0;
             self.end = 0;
             Some(array_shallow_copy)
@@ -212,23 +203,23 @@ impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
 }
 
 /// Attempts to initialize array with iterator.
-/// 
+///
 /// # Examples
 /// ```rust
 /// use array_tools;
-/// 
+///
 /// // If iterator yields less items than array capacity, this function will return `None`.
 /// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..4);
 /// assert_eq!(maybe_array, None);
-/// 
+///
 /// // If iterator yields just enough items to fill array, this function will `Some(array)`.
 /// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..5);
 /// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
-/// 
+///
 /// // If iterator yields more items than array capacity, only required amount of items will be
 /// // taken, function will return `Some(array)`.
 /// let maybe_array: Option<[u32; 5]> = array_tools::try_init_from_iterator(0..100);
-/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4])); 
+/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
 /// ```
 pub fn try_init_from_iterator<T, A, I>(mut iter: I) -> Option<A>
 where
@@ -253,14 +244,14 @@ where
 ///
 /// ```rust
 /// use array_tools;
-/// 
+///
 /// let mut value: u64 = 0;
 /// let array: [u64; 7] = array_tools::init_with(|| {
 ///     let return_value = value;
 ///     value += 1;
 ///     return_value
 /// });
-/// 
+///
 /// assert_eq!(array, [0, 1, 2, 3, 4, 5, 6]);
 /// ```
 pub fn init_with<T, A, F>(mut initializer_fn: F) -> A
@@ -279,11 +270,11 @@ where
 ///
 /// ```rust
 /// use array_tools;
-/// 
+///
 /// let array: [u64; 7] = array_tools::indexed_init_with(|idx| {
 ///     idx as u64 * 2
 /// });
-/// 
+///
 /// assert_eq!(array, [0, 2, 4, 6, 8, 10, 12]);
 /// ```
 pub fn indexed_init_with<T, A, F>(mut initializer_fn: F) -> A
@@ -301,16 +292,16 @@ where
 }
 
 /// A by-value iterator over array.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust
 /// use array_tools;
-/// 
+///
 /// // Notice - this struct is neither Copy nor Clone.
 /// #[derive(Debug, PartialEq, Eq)]
 /// struct Foo(u32);
-/// 
+///
 /// let array = [Foo(1), Foo(2), Foo(3)];
 /// let mut iter = array_tools::ArrayIntoIterator::new(array);
 /// assert_eq!(iter.next(), Some(Foo(1)));
@@ -319,7 +310,7 @@ where
 /// assert_eq!(iter.next(), None);
 /// ```
 pub struct ArrayIntoIterator<T, A: FixedSizeArray<T>> {
-    deque: FixedCapacityDequeLike<T, A>
+    deque: FixedCapacityDequeLike<T, A>,
 }
 
 impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
@@ -332,7 +323,6 @@ impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
 
 impl<T, A: FixedSizeArray<T>> Iterator for ArrayIntoIterator<T, A> {
     type Item = T;
-    
     fn next(&mut self) -> Option<T> {
         self.deque.pop_front()
     }
@@ -365,7 +355,7 @@ impl<T, A: FixedSizeArray<T>> DoubleEndedIterator for ArrayIntoIterator<T, A> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     #[test]
     fn not_enough_items() {
         let maybe_array: Option<[u64; 5]> = super::try_init_from_iterator(1..=4);
@@ -463,7 +453,7 @@ mod test {
 
         let array: [u64; 7] = super::init_with(initializer);
 
-        assert_eq!(array, [7, 7, 7, 7, 7, 7, 7]); 
+        assert_eq!(array, [7, 7, 7, 7, 7, 7, 7]);
     }
 
     #[test]
