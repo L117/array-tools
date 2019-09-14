@@ -78,7 +78,7 @@
 //! ```
 
 #![no_std]
-#![feature(fixed_size_array)]
+#![feature(fixed_size_array, const_fn, const_generics)]
 use core::array::FixedSizeArray;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -291,6 +291,63 @@ where
     deque.try_extract_array().unwrap()
 }
 
+/// A functiona akin to `size_of`, but computes length of array.
+///
+/// It is not much useful if array length is known, but in generic contexts where
+/// only `FixedSizeArray` trait is given, it may come in handy.
+///
+/// ```rust
+/// use array_tools;
+///
+/// let length = array_tools::length_of::<u64, [u64; 7]>();
+/// assert_eq!(length, 7);
+/// ```
+///
+/// # Note
+///
+/// Currently it is not a `const fn`, but this should be fixed in future.
+pub fn length_of<T, A: FixedSizeArray<T>>() -> usize {
+    let array: MaybeUninit<A> = MaybeUninit::uninit();
+    unsafe { (*array.as_ptr()).as_slice().len() }
+}
+
+/// A function to split arrays.
+///
+/// It is akin to `slice`'s `split_at`, except it does not take split index as argument
+/// and infers it from output arrays' lengths.
+/// ```rust
+/// use array_tools;
+///
+/// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
+/// let (left, right): ([u64; 2], [u64; 6]) = array_tools::split(array);
+/// assert_eq!(left, [1u64, 2]);
+/// assert_eq!(right, [3u64, 4, 5, 6, 7, 8]);
+/// ```
+///
+/// # Panics
+///
+/// Panics if sum of outputs' lengths is not equal to length of input.
+///
+/// # Note
+///
+/// Currently it panics if output arrays have incompatible lengths,
+/// in future this behavior most certainly will be changed to perform
+/// this check at compile time.
+pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeArray<T>>(
+    array: A,
+) -> (LEFT, RIGHT) {
+    assert_eq!(
+        array.as_slice().len(),
+        length_of::<T, LEFT>() + length_of::<T, RIGHT>(),
+        "Sum of outputs' lengths is not equal to length of input."
+    );
+
+    let mut iter = ArrayIntoIterator::new(array);
+    let left: LEFT = try_init_from_iterator(iter.by_ref()).unwrap();
+    let right: RIGHT = try_init_from_iterator(iter.by_ref()).unwrap();
+    (left, right)
+}
+
 /// A by-value iterator over array.
 ///
 /// # Examples
@@ -485,5 +542,47 @@ mod tests {
         let array: [u64; 7] = super::indexed_init_with(|idx| (idx % 2) as u64);
 
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
+    }
+
+    #[test]
+    fn length_of_empty() {
+        let length = super::length_of::<Option<u64>, [Option<u64>; 0]>();
+        assert_eq!(length, 0);
+    }
+
+    #[test]
+    fn length_of_non_empty() {
+        let length = super::length_of::<Option<u64>, [Option<u64>; 7]>();
+        assert_eq!(length, 7);
+    }
+
+    #[test]
+    fn split_okay() {
+        let array: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (left, right): ([u64; 2], [u64; 6]) = super::split(array);
+        assert_eq!(left, [1, 2]);
+        assert_eq!(right, [3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn split_okay_empty_left() {
+        let array: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (left, right): ([u64; 0], [u64; 8]) = super::split(array);
+        assert_eq!(left, []);
+        assert_eq!(right, [1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn split_okay_empty_right() {
+        let array: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (left, right): ([u64; 8], [u64; 0]) = super::split(array);
+        assert_eq!(left, [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(right, []);
+    }
+    #[test]
+    #[should_panic]
+    fn split_split_invalid_lengths_sum() {
+        let array: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (_left, _right): ([u64; 2], [u64; 4]) = super::split(array);
     }
 }
