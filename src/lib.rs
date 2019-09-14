@@ -75,6 +75,33 @@
 //!     NonCopyable(5),
 //!     NonCopyable(6),
 //! ]);
+//!
+//! // Split
+//! let array6: [u64; 7] = [1, 2, 3, 4, 5, 6, 7];
+//! let (array7, array8): ([u64; 3], [u64; 4]) = array_tools::split(array6);
+//!
+//! assert_eq!(array7, [1, 2, 3]);
+//! assert_eq!(array8, [4, 5, 6, 7]);
+//!
+//! // Join
+//! let array9: [u64; 3] = [1, 2, 3];
+//! let array10: [u64; 4] = [4, 5, 6, 7];
+//! let array11: [u64; 7] = array_tools::join(array9, array10);
+//!
+//! assert_eq!(array11, [1, 2, 3, 4, 5, 6, 7]);
+//!
+//! // Chunks
+//! use array_tools::{ArrayChunk, ArrayChunks};
+//! use core::marker::PhantomData;
+//!
+//! let array12: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+//!
+//! let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array12);
+//!
+//! assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1, 2, 3], PhantomData)));
+//! assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([4, 5, 6], PhantomData)));
+//! assert_eq!(chunks.next(), Some(ArrayChunk::Stump([7, 8], PhantomData)));
+//! assert_eq!(chunks.next(), None);
 //! ```
 
 #![no_std]
