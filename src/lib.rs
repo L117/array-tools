@@ -348,6 +348,44 @@ pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeA
     (left, right)
 }
 
+/// A function to join arrays.
+///
+/// Takes two arrays as arguments and returns array containing elements of both.
+///
+/// # Panics
+///
+/// Panics if output array length is not equal to sum of input arrays' lengths.
+///
+/// # Note
+///
+/// Currently it panics if output array has incompatible length.
+/// In future this behavior most certainly will be changed to perform this check
+/// at compile time.
+///
+/// # Examples
+///
+/// ```rust
+/// use array_tools;
+///
+/// let left = [1u64, 2];
+/// let right = [3u64, 4, 5, 6, 7, 8];
+/// let joined: [u64; 8] = array_tools::join(left, right);
+/// assert_eq!(joined, [1u64, 2, 3, 4, 5, 6, 7, 8]);
+/// ```
+pub fn join<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeArray<T>>(
+    left: LEFT,
+    right: RIGHT,
+) -> A {
+    assert_eq!(
+        length_of::<T, A>(),
+        left.as_slice().len() + right.as_slice().len(),
+        "Sum of inputs' lengths is not equal to output length."
+    );
+    let left_iter = ArrayIntoIterator::new(left);
+    let right_iter = ArrayIntoIterator::new(right);
+    try_init_from_iterator(left_iter.chain(right_iter)).unwrap()
+}
+
 /// A by-value iterator over array.
 ///
 /// # Examples
@@ -584,5 +622,45 @@ mod tests {
     fn split_split_invalid_lengths_sum() {
         let array: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
         let (_left, _right): ([u64; 2], [u64; 4]) = super::split(array);
+    }
+
+    #[test]
+    fn join_okay() {
+        let left: [u64; 2] = [1, 2];
+        let right: [u64; 6] = [3, 4, 5, 6, 7, 8];
+        let joined: [u64; 8] = super::join(left, right);
+        assert_eq!(joined, [1u64, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn join_okay_empty_left() {
+        let left: [u64; 0] = [];
+        let right: [u64; 6] = [1, 2, 3, 4, 5, 6];
+        let joined: [u64; 6] = super::join(left, right);
+        assert_eq!(joined, [1u64, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn join_okay_empty_right() {
+        let left: [u64; 6] = [1, 2, 3, 4, 5, 6];
+        let right: [u64; 0] = [];
+        let joined: [u64; 6] = super::join(left, right);
+        assert_eq!(joined, [1u64, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn join_insufficient_capacity() {
+        let left: [u64; 2] = [1, 2];
+        let right: [u64; 5] = [3, 4, 5, 6, 7];
+        let _joined: [u64; 6] = super::join(left, right);
+    }
+
+    #[test]
+    #[should_panic]
+    fn join_excessive_capacity() {
+        let left: [u64; 2] = [1, 2];
+        let right: [u64; 5] = [3, 4, 5, 6, 7];
+        let _joined: [u64; 10] = super::join(left, right);
     }
 }
