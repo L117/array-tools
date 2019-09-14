@@ -1,6 +1,6 @@
 [package]
 name = "array-tools"
-version = "0.2.7"
+version = "0.2.8"
 authors = ["Mikhail \"L117\" Nikolenko <l117@l117.xyz>"]
 edition = "2018"
 description = "A little collection of array-related utils aiming to make life easier. "
