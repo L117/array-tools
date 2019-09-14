@@ -1297,4 +1297,343 @@ mod tests {
             Some(ArrayChunk::Chunk([11u64, 12], PhantomData))
         );
     }
+
+    #[test]
+    fn fixed_capacity_deque_like_eq() {
+        use super::FixedCapacityDequeLike;
+        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque1.push_back(1);
+        deque1.push_back(2);
+        deque1.push_back(3);
+        deque1.push_back(4);
+        deque1.push_back(5);
+        deque1.pop_front();
+        deque1.pop_front();
+
+        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque2.push_back(1);
+        deque2.push_back(2);
+        deque2.push_back(3);
+        deque2.push_back(4);
+        deque2.push_back(5);
+        deque2.pop_front();
+        deque2.pop_front();
+
+        assert_eq!(deque1, deque2);
+    }
+
+    #[test]
+    fn fixed_capacity_deque_like_eq_empty() {
+        use super::FixedCapacityDequeLike;
+
+        let deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+
+        assert_eq!(deque1, deque2);
+    }
+
+    #[test]
+    fn fixed_capacity_deque_like_not_eq_different_items() {
+        use super::FixedCapacityDequeLike;
+
+        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque1.push_back(1);
+        deque1.push_back(2);
+
+        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque2.push_back(2);
+        deque1.push_back(3);
+
+        assert_ne!(deque1, deque2);
+    }
+
+    #[test]
+    fn fixed_capacity_deque_like_not_eq_different_offsets() {
+        use super::FixedCapacityDequeLike;
+
+        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque1.push_back(0);
+        deque1.push_back(1);
+        deque1.push_back(2);
+        deque1.pop_back();
+
+        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque2.push_back(1);
+        deque1.push_back(2);
+
+        assert_ne!(deque1, deque2);
+    }
+
+    #[test]
+    fn fixed_capacity_deque_like_clone_no_offset() {
+        use super::FixedCapacityDequeLike;
+
+        let mut deque: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque.push_back(1);
+        deque.push_back(2);
+        deque.push_back(3);
+
+        let clone = deque.clone();
+
+        assert_eq!(deque, clone);
+    }
+
+    #[test]
+    fn fixed_capacity_deque_like_clone_with_offset() {
+        use super::FixedCapacityDequeLike;
+
+        let mut deque: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        deque.push_back(1);
+        deque.push_back(2);
+        deque.push_back(3);
+        deque.push_back(4);
+        deque.push_back(5);
+        deque.pop_back();
+        deque.pop_front();
+
+        let clone = deque.clone();
+
+        assert_eq!(deque, clone);
+    }
+
+    #[test]
+    fn array_into_iterator_eq() {
+        use super::ArrayIntoIterator;
+
+        let a = [1, 2, 3, 4, 5];
+        let b = [1, 2, 3, 4, 5];
+
+        let iter_a = ArrayIntoIterator::new(a);
+        let iter_b = ArrayIntoIterator::new(b);
+
+        assert_eq!(iter_a, iter_b);
+    }
+
+    #[test]
+    fn array_into_iterator_eq_if_items_eq() {
+        use super::ArrayIntoIterator;
+        use core::mem;
+
+        let a = [1, 2, 3, 4, 5, 6];
+        let b = [0, 0, 0, 3, 4, 5];
+
+        let mut iter_a = ArrayIntoIterator::new(a);
+        let mut iter_b = ArrayIntoIterator::new(b);
+
+        mem::drop(iter_a.next());
+        mem::drop(iter_a.next());
+        mem::drop(iter_a.next_back());
+
+        mem::drop(iter_b.next());
+        mem::drop(iter_b.next());
+        mem::drop(iter_b.next());
+
+        assert_eq!(iter_a, iter_b);
+    }
+
+    #[test]
+    fn array_into_iterator_clone() {
+        use super::ArrayIntoIterator;
+        let a = [1, 2, 3, 4, 5];
+        let a_iter = ArrayIntoIterator::new(a);
+        let a_iter_clone = a_iter.clone();
+        assert_eq!(a_iter, a_iter_clone);
+    }
+
+    #[test]
+    fn array_chunk_eq_chunk() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+
+        assert_eq!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_eq_stump() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+
+        assert_eq!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_ne_stump_and_chunk() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+
+        assert_ne!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_ne_different_chunk_items() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([4, 3, 2, 1], PhantomData);
+
+        assert_ne!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_ne_different_stump_items() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([4, 3, 2], PhantomData);
+
+        assert_ne!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_clone_chunk() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk: ArrayChunk<u64, [u64; 4], [u64; 3]> =
+            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk_clone = chunk.clone();
+
+        assert_eq!(chunk, chunk_clone);
+    }
+
+    #[test]
+    fn array_chunk_clone_stump() {
+        use super::ArrayChunk;
+        use core::marker::PhantomData;
+
+        let chunk: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk_clone = chunk.clone();
+
+        assert_eq!(chunk, chunk_clone);
+    }
+
+    #[test]
+    fn array_chunks_eq_case_1() {
+        use super::ArrayChunks;
+        use core::mem;
+
+        let a = [1, 2, 3, 4, 5, 6, 7, 8];
+        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+
+        let b = [1, 2, 3, 4, 5, 6, 7, 8];
+        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next_back());
+        mem::drop(b_chunks.next_back());
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+    }
+
+    #[test]
+    fn array_chunks_eq_case_2() {
+        use super::ArrayChunks;
+        use core::mem;
+
+        let a = [0, 1, 2, 4, 5, 6, 8, 9];
+        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+
+        let b = [1, 2, 3, 4, 5, 6, 7, 8];
+        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+
+        assert_ne!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_ne!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next_back());
+        mem::drop(b_chunks.next_back());
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+    }
+
+    #[test]
+    fn array_chunks_eq_case_3() {
+        use super::ArrayChunks;
+        use core::mem;
+
+        let a = [0, 1, 2, 4, 5, 6, 8, 9];
+        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+
+        let b = [10, 11, 12, 13, 14, 15, 16, 17];
+        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+
+        assert_ne!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_ne!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next_back());
+        mem::drop(b_chunks.next_back());
+
+        assert_ne!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+    }
+
+    #[test]
+    fn array_chunks_clone() {
+        use super::ArrayChunks;
+        use core::mem;
+
+        let a = [1, 2, 3, 4, 5, 6, 7, 8];
+        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut b_chunks = a_chunks.clone();
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next_back());
+        mem::drop(b_chunks.next_back());
+
+        assert_eq!(a_chunks, b_chunks);
+
+        mem::drop(a_chunks.next());
+        mem::drop(b_chunks.next());
+
+        assert_eq!(a_chunks, b_chunks);
+    }
 }
