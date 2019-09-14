@@ -220,6 +220,14 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
             None
         }
     }
+
+    fn as_slice(&self) -> &[T] {
+        unsafe { &(*self.array.as_ptr()).as_slice()[self.begining..self.end] }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { &mut (*self.array.as_mut_ptr()).as_mut_slice()[self.begining..self.end] }
+    }
 }
 
 impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
@@ -227,6 +235,56 @@ impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
         while let Some(item) = self.pop_back() {
             mem::drop(item);
         }
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> Debug for FixedCapacityDequeLike<T, A>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FixedCapacityDequeLike")
+            .field("array", &self.as_slice())
+            .field("begining", &self.begining)
+            .field("end", &self.end)
+            .field("_element", &self._element)
+            .finish()
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> PartialEq for FixedCapacityDequeLike<T, A>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.capacity() == other.capacity()
+            && self.begining == other.begining
+            && self.end == other.end
+            && self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> Eq for FixedCapacityDequeLike<T, A> where T: Eq {}
+
+impl<T, A: FixedSizeArray<T>> Clone for FixedCapacityDequeLike<T, A>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut clone = FixedCapacityDequeLike {
+            array: MaybeUninit::uninit(),
+            begining: self.begining,
+            end: self.end,
+            _element: PhantomData,
+        };
+
+        unsafe {
+            for (src, dst) in self.as_slice().iter().zip(clone.as_mut_slice()) {
+                ptr::write(dst, src.clone());
+            }
+        }
+
+        clone
     }
 }
 
@@ -436,6 +494,39 @@ pub struct ArrayIntoIterator<T, A: FixedSizeArray<T>> {
     deque: FixedCapacityDequeLike<T, A>,
 }
 
+impl<T, A: FixedSizeArray<T>> PartialEq for ArrayIntoIterator<T, A>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.deque.as_slice() == other.deque.as_slice()
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> Eq for ArrayIntoIterator<T, A> where T: Eq {}
+
+impl<T, A: FixedSizeArray<T>> Clone for ArrayIntoIterator<T, A>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        ArrayIntoIterator {
+            deque: self.deque.clone(),
+        }
+    }
+}
+
+impl<T, A: FixedSizeArray<T>> Debug for ArrayIntoIterator<T, A>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArrayIntoIterator")
+            .field("deque", &self.deque)
+            .finish()
+    }
+}
+
 impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
     pub fn new(array: A) -> ArrayIntoIterator<T, A> {
         ArrayIntoIterator {
@@ -532,6 +623,26 @@ impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Eq for ArrayChunk<T,
 {
 }
 
+impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Clone for ArrayChunk<T, CHUNK, STUMP>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            ArrayChunk::Chunk(chunk, _) => {
+                let chunk_clone: CHUNK =
+                    try_init_from_iterator(chunk.as_slice().iter().cloned()).unwrap();
+                ArrayChunk::Chunk(chunk_clone, PhantomData)
+            }
+            ArrayChunk::Stump(stump, _) => {
+                let stump_clone: STUMP =
+                    try_init_from_iterator(stump.as_slice().iter().cloned()).unwrap();
+                ArrayChunk::Stump(stump_clone, PhantomData)
+            }
+        }
+    }
+}
+
 /// An iterator yielding chunks ("subarrays") of requested size, akin to `core::slice::Chunks`.
 ///
 /// If array can't be evenly divided into chunks, the last item will be a so called stump - an
@@ -585,6 +696,53 @@ pub struct ArrayChunks<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP:
     has_stump: bool,
     _chunk_pd: PhantomData<CHUNK>,
     _stump_pd: PhantomData<STUMP>,
+}
+
+impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Debug
+    for ArrayChunks<T, A, CHUNK, STUMP>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArrayChunks")
+            .field("iter", &self.iter)
+            .field("has_stump", &self.has_stump)
+            .field("_chunk_pd", &self._chunk_pd)
+            .field("_stump_pd", &self._stump_pd)
+            .finish()
+    }
+}
+
+impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> PartialEq
+    for ArrayChunks<T, A, CHUNK, STUMP>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.iter == other.iter && self.has_stump == other.has_stump
+    }
+}
+
+impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Eq
+    for ArrayChunks<T, A, CHUNK, STUMP>
+where
+    T: Eq,
+{
+}
+
+impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Clone
+    for ArrayChunks<T, A, CHUNK, STUMP>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        ArrayChunks {
+            iter: self.iter.clone(),
+            has_stump: self.has_stump,
+            _chunk_pd: PhantomData,
+            _stump_pd: PhantomData,
+        }
+    }
 }
 
 impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
