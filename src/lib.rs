@@ -625,11 +625,25 @@ mod tests {
     }
 
     #[test]
+    fn split_empty_into_empty_and_empty() {
+        let array: [u64; 0] = [];
+        let (_left, _right): ([u64; 0], [u64; 0]) = super::split(array);
+    }
+
+    #[test]
     fn join_okay() {
         let left: [u64; 2] = [1, 2];
         let right: [u64; 6] = [3, 4, 5, 6, 7, 8];
         let joined: [u64; 8] = super::join(left, right);
         assert_eq!(joined, [1u64, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn join_empty_and_empty() {
+        let left: [u64; 0] = [];
+        let right: [u64; 0] = [];
+        let joined: [u64; 0] = super::join(left, right);
+        assert_eq!(joined, []);
     }
 
     #[test]
