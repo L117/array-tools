@@ -78,7 +78,7 @@
 //! ```
 
 #![no_std]
-#![feature(fixed_size_array, const_fn, const_generics)]
+#![feature(fixed_size_array)]
 use core::array::FixedSizeArray;
 use core::fmt::{self, Debug};
 use core::marker::PhantomData;
