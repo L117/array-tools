@@ -1,108 +1,37 @@
 //! # Array Tools
 //!
-//! A little collection of array-related utils aiming to make life easier.
+//! [![Crate](https://img.shields.io/crates/v/array-tools.svg)](https://crates.io/crates/array-tools)
+//! [![Documentation](https://docs.rs/array-tools/badge.svg)](https://docs.rs/array-tools)
+//! [![Build Status](https://travis-ci.com/L117/array-tools.svg?branch=master)](https://travis-ci.com/L117/array-tools)
 //!
+//! A collection of tools to help dealing with our beloved ❤️ fixed size arrays (Including generic contexts).
 //!
-//! ## Stability warning
+//! ## Stability notice
 //!
 //! Requires nightly.
 //!
-//! Consider this crate experimental. Some (all?) of currently provided features
-//! are most likely will be integrated into `rust`'s core/std library sooner or
-//! later, and with arrival of const generics public interfaces are most likely
-//! will be changed.
+//! This crate heavely uses `FixedSizeArray` trait, which is currently experimental.
+//! Because of this, crate is experimental as well.
+//! No other sources of severe breakage should be expected.
 //!
 //! ## Features
 //!
-//! - **Metafeature:** all features below should work for arrays of **any** size.
-//! - Array initialization with iterator.
-//! - Array initizlization with function (with or without index passed as
-//!   argument).
-//! - Array by-value "into" iterator.
-//! - No dependency on `std` and no heap allocations.
+//! - **Metafeature**: all features below should work for arrays of **any** size.
+//! - Initialization with iterator.
+//! - Initialization with function (with or without index as argument).
+//! - Consuming iterator.
+//! - Consuming chunks iterator.
+//! - Consuming split.
+//! - Consuming join.
+//! - No dependency on `std` and no heap allocations, thanks to underlaying fixed-capacity stack-allocated deque-like structure.
 //!
 //! ## Examples
 //!
-//! ```rust
-//! use array_tools::{self, ArrayIntoIterator};
+//! See [documentation](https://docs.rs/array-tools) for examples, it covers most if not all use cases.
 //!
+//! ## Contributing
 //!
-//! // Array initialization with iterator.
-//! let array1: [u64; 7] =
-//!     array_tools::try_init_from_iterator(0u64..17).unwrap();
-//!
-//! assert_eq!(array1, [0, 1, 2, 3, 4, 5, 6]);
-//!
-//!
-//! // Array initialization with function (w/o index).
-//! let mut value = 0u64;
-//!
-//! let array2: [u64; 7] = array_tools::init_with(|| {
-//!     let tmp = value;
-//!     value += 1;
-//!     tmp
-//! });
-//!
-//! assert_eq!(array2, [0, 1, 2, 3, 4, 5, 6]);
-//!
-//!
-//! // Array initialization with function (w/ index).
-//! let array3: [u64; 7] = array_tools::indexed_init_with(|idx| {
-//!     idx as u64
-//! });
-//!
-//! assert_eq!(array3, [0, 1, 2, 3, 4, 5, 6]);
-//!
-//!
-//! // Array by-value iterator.
-//! #[derive(Debug, PartialEq, Eq)]
-//! struct NonCopyable(u64);
-//!
-//! let array4: [NonCopyable; 7] =
-//!     array_tools::indexed_init_with(|idx| NonCopyable(idx as u64));
-//!
-//! let iter = ArrayIntoIterator::new(array4);
-//!
-//! let array5: [NonCopyable; 7] =
-//!     array_tools::try_init_from_iterator(iter).unwrap();
-//!
-//! assert_eq!(array5, [
-//!     NonCopyable(0),
-//!     NonCopyable(1),
-//!     NonCopyable(2),
-//!     NonCopyable(3),
-//!     NonCopyable(4),
-//!     NonCopyable(5),
-//!     NonCopyable(6),
-//! ]);
-//!
-//! // Split
-//! let array6: [u64; 7] = [1, 2, 3, 4, 5, 6, 7];
-//! let (array7, array8): ([u64; 3], [u64; 4]) = array_tools::split(array6);
-//!
-//! assert_eq!(array7, [1, 2, 3]);
-//! assert_eq!(array8, [4, 5, 6, 7]);
-//!
-//! // Join
-//! let array9: [u64; 3] = [1, 2, 3];
-//! let array10: [u64; 4] = [4, 5, 6, 7];
-//! let array11: [u64; 7] = array_tools::join(array9, array10);
-//!
-//! assert_eq!(array11, [1, 2, 3, 4, 5, 6, 7]);
-//!
-//! // Chunks
-//! use array_tools::{ArrayChunk, ArrayChunks};
-//! use core::marker::PhantomData;
-//!
-//! let array12: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-//!
-//! let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array12);
-//!
-//! assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1, 2, 3], PhantomData)));
-//! assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([4, 5, 6], PhantomData)));
-//! assert_eq!(chunks.next(), Some(ArrayChunk::Stump([7, 8], PhantomData)));
-//! assert_eq!(chunks.next(), None);
-//! ```
+//! Contributions of any shape and form are welcome.
 
 #![no_std]
 #![feature(fixed_size_array)]
@@ -288,24 +217,56 @@ where
     }
 }
 
-/// Attempts to initialize array with iterator.
+/// Attempts to create instance of array from iterator.
+///
+/// - If iterator yields not enough items to fill array, this function returns `None`.
+/// - If iterator yields enough items, this function returns `Some(array)`.
+/// - If iterator yields excessive items, this function only takes number of items
+///   enough to fill array.
+///
+///
+/// # Panics
+///
+/// - Only if iterator does.
 ///
 /// # Examples
+///
+/// Not enough items case.
 /// ```rust
-/// use array_tools;
+/// use array_tools::try_init_from_iterator;
 ///
-/// // If iterator yields less items than array capacity, this function will return `None`.
-/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..4);
+/// let mut iter = (0..4);
+///
+/// let maybe_array: Option<[u64; 5]> = try_init_from_iterator(iter.by_ref());
+///
 /// assert_eq!(maybe_array, None);
+/// assert_eq!(iter.next(), None);
+/// ```
 ///
-/// // If iterator yields just enough items to fill array, this function will `Some(array)`.
-/// let maybe_array: Option<[u64; 5]> = array_tools::try_init_from_iterator(0..5);
-/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
+/// Enough items case.
+/// ```rust
+/// use array_tools::try_init_from_iterator;
 ///
-/// // If iterator yields more items than array capacity, only required amount of items will be
-/// // taken, function will return `Some(array)`.
-/// let maybe_array: Option<[u32; 5]> = array_tools::try_init_from_iterator(0..100);
+/// let mut iter = (0..5);
+///
+/// let maybe_array: Option<[u64; 5]> = try_init_from_iterator(iter.by_ref());
+///
 /// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
+/// assert_eq!(iter.next(), None);
+/// ```
+///
+/// Excessive items case.
+/// ```rust
+/// use array_tools::try_init_from_iterator;
+///
+/// let mut iter = (0..7);
+///
+/// let maybe_array: Option<[u32; 5]> = try_init_from_iterator(iter.by_ref());
+///
+/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
+/// assert_eq!(iter.next(), Some(5));
+/// assert_eq!(iter.next(), Some(6));
+/// assert_eq!(iter.next(), None);
 /// ```
 pub fn try_init_from_iterator<T, A, I>(mut iter: I) -> Option<A>
 where
@@ -326,7 +287,14 @@ where
     }
 }
 
-/// Initializes array with values provided by function.
+/// Creates a new array instance filled with values generated by a given function.
+/// This variant expects function without arguments.
+///
+/// # Panics
+///
+/// - Only panics if provided function does.
+///
+/// # Examples
 ///
 /// ```rust
 /// use array_tools;
@@ -352,7 +320,15 @@ where
     deque.try_extract_array().unwrap()
 }
 
-/// Initializes array with values provided by function (version with index as argument).
+/// Creates a new array instance filled with values generated by a given function.
+/// This variant expects a function with single argument - an index of element
+/// to initialize.
+///
+/// # Panics
+///
+/// - Only panics if provided function does.
+///
+/// # Examples
 ///
 /// ```rust
 /// use array_tools;
@@ -377,48 +353,62 @@ where
     deque.try_extract_array().unwrap()
 }
 
-/// A functiona akin to `size_of`, but computes length of array.
+/// Returns the length of array.
 ///
-/// It is not much useful if array length is known, but in generic contexts where
-/// only `FixedSizeArray` trait is given, it may come in handy.
+/// Though it is not much useful when concrete array type is given and it's
+/// size is known, it may come in handy when dealing with arrays hidden behind
+/// `FixedSizeArray` in generic contexts.
+///
+/// # Examples
 ///
 /// ```rust
-/// use array_tools;
+/// use array_tools::length_of;
 ///
-/// let length = array_tools::length_of::<u64, [u64; 7]>();
+/// let length = length_of::<u64, [u64; 7]>();
 /// assert_eq!(length, 7);
 /// ```
 ///
 /// # Note
 ///
-/// Currently it is not a `const fn`, but this should be fixed in future.
+/// Though currently it seems impossible to covert this one into `const fn`,
+/// this sure will be done when this will become possible.
 pub fn length_of<T, A: FixedSizeArray<T>>() -> usize {
     let array: MaybeUninit<A> = MaybeUninit::uninit();
     unsafe { (*array.as_ptr()).as_slice().len() }
 }
 
-/// A function to split arrays.
+/// Splits array into two subarrays.
 ///
-/// It is akin to `slice`'s `split_at`, except it does not take split index as argument
-/// and infers it from output arrays' lengths.
-/// ```rust
-/// use array_tools;
+/// Because this function deals with arrays of constant size, it does not
+/// expect any arguments, instead it expects two generic parameters - a two
+/// array types that represent output subarrays. These must have the
+/// same element type that input array does, sum of their lengths must
+/// match exactly that of input array.
 ///
-/// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
-/// let (left, right): ([u64; 2], [u64; 6]) = array_tools::split(array);
-/// assert_eq!(left, [1u64, 2]);
-/// assert_eq!(right, [3u64, 4, 5, 6, 7, 8]);
-/// ```
+/// Does not perform any cloning operations, only moves values.
 ///
 /// # Panics
 ///
-/// Panics if sum of outputs' lengths is not equal to length of input.
+/// Panics if sum of output subarrays' length does not match exactly
+/// the length of input array.
 ///
 /// # Note
 ///
-/// Currently it panics if output arrays have incompatible lengths,
-/// in future this behavior most certainly will be changed to perform
-/// this check at compile time.
+/// Though currently it panics if output arrays have incompatible lengths,
+/// this behavior will be changed to perform this check at compile time,
+/// when this will become possible.
+///
+/// # Examples
+///
+/// ```rust
+/// use array_tools::split;
+///
+/// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
+/// let (left, right): ([u64; 2], [u64; 6]) = array_tools::split(array);
+///
+/// assert_eq!(left, [1u64, 2]);
+/// assert_eq!(right, [3u64, 4, 5, 6, 7, 8]);
+/// ```
 pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeArray<T>>(
     array: A,
 ) -> (LEFT, RIGHT) {
@@ -434,19 +424,25 @@ pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeA
     (left, right)
 }
 
-/// A function to join arrays.
+/// Joins two arrays.
 ///
-/// Takes two arrays as arguments and returns array containing elements of both.
+/// Creates a new array instance of length equal to sum of input arrays' lengths
+/// and containing elements of `right` array appended to elements of the `left`.
+///
+/// Element types of first, second and output arrays must match. Sum of input
+/// arrays' lengths must match exactly length of output array.
+///
+/// Does not perform any cloning operations, only moves values.
 ///
 /// # Panics
 ///
-/// Panics if output array length is not equal to sum of input arrays' lengths.
+/// - Panics if output array length is not equal to sum of input arrays' lengths.
 ///
 /// # Note
 ///
-/// Currently it panics if output array has incompatible length.
-/// In future this behavior most certainly will be changed to perform this check
-/// at compile time.
+/// Though currently it panics if output array has incompatible length,
+/// this behavior will be changed to perform this check at compile time,
+/// when this will become possible.
 ///
 /// # Examples
 ///
@@ -472,7 +468,11 @@ pub fn join<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeAr
     try_init_from_iterator(left_iter.chain(right_iter)).unwrap()
 }
 
-/// A by-value iterator over array.
+/// A consuming iterator over array elements.
+///
+/// Consumes array upon creation and yields it's elements one-by-one.
+///
+/// Does not perform any cloning operations, only moves values.
 ///
 /// # Examples
 ///
@@ -569,6 +569,10 @@ impl<T, A: FixedSizeArray<T>> DoubleEndedIterator for ArrayIntoIterator<T, A> {
 }
 
 /// An item of `ArrayChunks` iterator.
+///
+/// See `ArrayChunks` documentation.
+///
+/// Each variant contains `PhantomData`, but it should be ignored completely.
 pub enum ArrayChunk<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> {
     /// A normal chunk.
     Chunk(CHUNK, PhantomData<T>),
@@ -643,27 +647,57 @@ where
     }
 }
 
-/// An iterator yielding chunks ("subarrays") of requested size, akin to `core::slice::Chunks`.
+/// A consuming iterator over non-overlaping subarrays of equal size.
 ///
-/// If array can't be evenly divided into chunks, the last item will be a so called stump - an
-/// array that contains remaining number of items, insufficient to form a chunk.
+/// Consumes array upon creation and yields subarrays "chunks" of requested size.
 ///
-/// As item type, array type, chunk type and stump type must be known at compile time, there
-/// are 4 generic parameters that represent them.
+/// If array can't be divided evenly into chunks, the last yielded item will be
+/// a "stump" - an array of length `input_array_length % chunk_size_length`,
+/// containing what remains at the end.
 ///
-/// 1. The first generic parameter must match input array *item* type.
-/// 2. The second generic parameter must match input array type. Item type must match first parameter,
-///    size may be whatever pleases you.
-/// 3. The third generic parameter is chunk - an array. Item type must match first parameter,
-///    size may be whatever pleases you.
-/// 4. The fourth generic parameter is stump - an array. Item type must match first parameter,
-///    size must be `array_length % chunk_length`.
+/// If array can be divided evenly into "chunks", there will be no "stump".
+///
+/// Because this iterator deals with arrays of constant size, it does not
+/// expect chunk size argument, instead it expects four generic parameters:
+/// - Element type.
+/// - Consumed array type.
+/// - Chunk array type.
+/// - Stump array type.
+///
+/// Element type of consumed, chunk and stump array types must match.
+/// Consumed array length could be anything, including zero.
+/// Chunk array length must be non-zero.
+/// In case input array can't be divided evenly into chunks, stump array length
+/// must be `consumed_array_length % chunk_array_length`.
+/// In case input array can be divided evenly, stump array length must be 0.
+///
+/// Does not perform any cloning operations, only moves values.
 ///
 /// # Examples
 ///
+/// Case without "stump".
 /// ```rust
 /// use array_tools::{ArrayChunk, ArrayChunks};
 /// use core::marker::PhantomData;
+///
+/// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
+///
+/// // Divide array `[u64; 8]` into `[u64; 2]` chunks. It can be divided evenly,
+/// // so there will be no stump.
+/// let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 2], [u64; 0]> = ArrayChunks::new(array);
+///
+/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1u64, 2], PhantomData)));
+/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([3u64, 4], PhantomData)));
+/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([5u64, 6], PhantomData)));
+/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([7u64, 8], PhantomData)));
+/// assert_eq!(chunks.next(), None);
+/// ```
+///
+/// Case with "stump".
+/// ```rust
+/// use array_tools::{ArrayChunk, ArrayChunks};
+/// use core::marker::PhantomData;
+///
 /// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
 ///
 /// // Divide array `[u64; 8]` into `[u64; 3]` chunks. It can't be divided evenly, so last item
@@ -676,19 +710,12 @@ where
 /// assert_eq!(chunks.next(), None);
 /// ```
 ///
+/// Actually, most generic parameters may be ommited:
 /// ```rust
-/// use array_tools::{ArrayChunk, ArrayChunks};
-/// use core::marker::PhantomData;
-/// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
+/// use array_tools::ArrayChunks;
 ///
-/// // Divide array `[u64; 8]` into `[u64; 2]` chunks. It *can* be divided evenly, so stump size is
-/// // 0 and it won't ever be yielded.
-/// let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 2], [u64; 0]> = ArrayChunks::new(array);
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1u64, 2], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([3u64, 4], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([5u64, 6], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([7u64, 8], PhantomData)));
-/// assert_eq!(chunks.next(), None);
+/// let array = [1, 2, 3, 4, 5, 6, 7, 8];
+/// let _chunks: ArrayChunks<_, _, [_; 3], [_; 2]> = ArrayChunks::new(array);
 /// ```
 pub struct ArrayChunks<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
 {
@@ -748,18 +775,18 @@ where
 impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
     ArrayChunks<T, A, CHUNK, STUMP>
 {
-    /// Creates a new `ArrayChunks` iterator.
+    /// Creates a new instance of `ArrayChunks` iterator.
     ///
     /// # Panics
     ///
-    /// If chunk size is 0.
-    /// If stump size is not valid (See structure documentation).
+    /// - If chunk size is 0.
+    /// - If stump size is not equal to `consumed_array_length % chunk_array_length`.
     ///
     /// # Note
     ///
     /// Though currently this function panics if chunk size is 0 and/or stump size
-    /// is not valid, this behavior most certainly will be changed in future to
-    /// perform these checks at compile time.
+    /// is not valid, this behavior will be changed to perform these checks
+    /// at compile time, when this will become possible.
     pub fn new(array: A) -> ArrayChunks<T, A, CHUNK, STUMP> {
         let chunk_length = length_of::<T, CHUNK>();
         assert_ne!(chunk_length, 0);
@@ -1635,5 +1662,13 @@ mod tests {
         mem::drop(b_chunks.next());
 
         assert_eq!(a_chunks, b_chunks);
+    }
+
+    #[test]
+    fn array_chunks_ommit_generic_parameters() {
+        use super::ArrayChunks;
+
+        let array = [1, 2, 3, 4, 5, 6, 7, 8];
+        let _chunks: ArrayChunks<_, _, [_; 3], [_; 2]> = ArrayChunks::new(array);
     }
 }
