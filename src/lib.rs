@@ -41,14 +41,20 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
-struct FixedCapacityDequeLike<T, A: FixedSizeArray<T>> {
+struct FixedCapacityDequeLike<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     array: MaybeUninit<A>,
     begining: usize,
     end: usize,
     _element: PhantomData<T>,
 }
 
-impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
+impl<T, A> FixedCapacityDequeLike<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     fn new() -> FixedCapacityDequeLike<T, A> {
         FixedCapacityDequeLike {
             array: MaybeUninit::uninit(),
@@ -159,7 +165,10 @@ impl<T, A: FixedSizeArray<T>> FixedCapacityDequeLike<T, A> {
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
+impl<T, A> Drop for FixedCapacityDequeLike<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     fn drop(&mut self) {
         while let Some(item) = self.pop_back() {
             mem::drop(item);
@@ -167,8 +176,9 @@ impl<T, A: FixedSizeArray<T>> Drop for FixedCapacityDequeLike<T, A> {
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Debug for FixedCapacityDequeLike<T, A>
+impl<T, A> Debug for FixedCapacityDequeLike<T, A>
 where
+    A: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -181,8 +191,9 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>> PartialEq for FixedCapacityDequeLike<T, A>
+impl<T, A> PartialEq for FixedCapacityDequeLike<T, A>
 where
+    A: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -193,10 +204,16 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Eq for FixedCapacityDequeLike<T, A> where T: Eq {}
-
-impl<T, A: FixedSizeArray<T>> Clone for FixedCapacityDequeLike<T, A>
+impl<T, A> Eq for FixedCapacityDequeLike<T, A>
 where
+    A: FixedSizeArray<T>,
+    T: Eq,
+{
+}
+
+impl<T, A> Clone for FixedCapacityDequeLike<T, A>
+where
+    A: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
@@ -277,12 +294,10 @@ where
     loop {
         if deque.is_full() {
             break deque.try_extract_array();
+        } else if let Some(item) = iter.next() {
+            deque.push_back(item)
         } else {
-            if let Some(item) = iter.next() {
-                deque.push_back(item)
-            } else {
-                break None;
-            }
+            break None;
         }
     }
 }
@@ -414,7 +429,10 @@ where
 ///
 /// Though currently it seems impossible to covert this one into `const fn`,
 /// this sure will be done when this will become possible.
-pub fn length_of<T, A: FixedSizeArray<T>>() -> usize {
+pub fn length_of<T, A>() -> usize
+where
+    A: FixedSizeArray<T>,
+{
     let array: MaybeUninit<A> = MaybeUninit::uninit();
     unsafe { (*array.as_ptr()).as_slice().len() }
 }
@@ -451,9 +469,12 @@ pub fn length_of<T, A: FixedSizeArray<T>>() -> usize {
 /// assert_eq!(left, [1u64, 2]);
 /// assert_eq!(right, [3u64, 4, 5, 6, 7, 8]);
 /// ```
-pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeArray<T>>(
-    array: A,
-) -> (LEFT, RIGHT) {
+pub fn split<T, A, LEFT, RIGHT>(array: A) -> (LEFT, RIGHT)
+where
+    A: FixedSizeArray<T>,
+    LEFT: FixedSizeArray<T>,
+    RIGHT: FixedSizeArray<T>,
+{
     assert_eq!(
         array.as_slice().len(),
         length_of::<T, LEFT>() + length_of::<T, RIGHT>(),
@@ -496,10 +517,12 @@ pub fn split<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeA
 /// let joined: [u64; 8] = array_tools::join(left, right);
 /// assert_eq!(joined, [1u64, 2, 3, 4, 5, 6, 7, 8]);
 /// ```
-pub fn join<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeArray<T>>(
-    left: LEFT,
-    right: RIGHT,
-) -> A {
+pub fn join<T, A, LEFT, RIGHT>(left: LEFT, right: RIGHT) -> A
+where
+    A: FixedSizeArray<T>,
+    LEFT: FixedSizeArray<T>,
+    RIGHT: FixedSizeArray<T>,
+{
     assert_eq!(
         length_of::<T, A>(),
         left.as_slice().len() + right.as_slice().len(),
@@ -532,12 +555,16 @@ pub fn join<T, A: FixedSizeArray<T>, LEFT: FixedSizeArray<T>, RIGHT: FixedSizeAr
 /// assert_eq!(iter.next(), Some(Foo(3)));
 /// assert_eq!(iter.next(), None);
 /// ```
-pub struct ArrayIntoIterator<T, A: FixedSizeArray<T>> {
+pub struct ArrayIntoIterator<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     deque: FixedCapacityDequeLike<T, A>,
 }
 
-impl<T, A: FixedSizeArray<T>> PartialEq for ArrayIntoIterator<T, A>
+impl<T, A> PartialEq for ArrayIntoIterator<T, A>
 where
+    A: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -545,10 +572,16 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Eq for ArrayIntoIterator<T, A> where T: Eq {}
-
-impl<T, A: FixedSizeArray<T>> Clone for ArrayIntoIterator<T, A>
+impl<T, A> Eq for ArrayIntoIterator<T, A>
 where
+    A: FixedSizeArray<T>,
+    T: Eq,
+{
+}
+
+impl<T, A> Clone for ArrayIntoIterator<T, A>
+where
+    A: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
@@ -558,8 +591,9 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Debug for ArrayIntoIterator<T, A>
+impl<T, A> Debug for ArrayIntoIterator<T, A>
 where
+    A: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -569,7 +603,10 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
+impl<T, A> ArrayIntoIterator<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     pub fn new(array: A) -> ArrayIntoIterator<T, A> {
         ArrayIntoIterator {
             deque: FixedCapacityDequeLike::from_array(array),
@@ -577,7 +614,10 @@ impl<T, A: FixedSizeArray<T>> ArrayIntoIterator<T, A> {
     }
 }
 
-impl<T, A: FixedSizeArray<T>> Iterator for ArrayIntoIterator<T, A> {
+impl<T, A> Iterator for ArrayIntoIterator<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.deque.pop_front()
@@ -604,7 +644,10 @@ impl<T, A: FixedSizeArray<T>> Iterator for ArrayIntoIterator<T, A> {
     }
 }
 
-impl<T, A: FixedSizeArray<T>> DoubleEndedIterator for ArrayIntoIterator<T, A> {
+impl<T, A> DoubleEndedIterator for ArrayIntoIterator<T, A>
+where
+    A: FixedSizeArray<T>,
+{
     fn next_back(&mut self) -> Option<T> {
         self.deque.pop_back()
     }
@@ -615,15 +658,21 @@ impl<T, A: FixedSizeArray<T>> DoubleEndedIterator for ArrayIntoIterator<T, A> {
 /// See `ArrayChunks` documentation.
 ///
 /// Each variant contains `PhantomData`, but it should be ignored completely.
-pub enum ArrayChunk<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> {
+pub enum ArrayChunk<T, Chunk, Stump>
+where
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
+{
     /// A normal chunk.
-    Chunk(CHUNK, PhantomData<T>),
+    Chunk(Chunk, PhantomData<T>),
     /// A reaminder that has insufficient length to be a chunk.
-    Stump(STUMP, PhantomData<T>),
+    Stump(Stump, PhantomData<T>),
 }
 
-impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Debug for ArrayChunk<T, CHUNK, STUMP>
+impl<T, Chunk, Stump> Debug for ArrayChunk<T, Chunk, Stump>
 where
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -642,9 +691,10 @@ where
     }
 }
 
-impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> PartialEq
-    for ArrayChunk<T, CHUNK, STUMP>
+impl<T, Chunk, Stump> PartialEq for ArrayChunk<T, Chunk, Stump>
 where
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -664,24 +714,29 @@ where
     }
 }
 
-impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Eq for ArrayChunk<T, CHUNK, STUMP> where
-    T: Eq
+impl<T, Chunk, Stump> Eq for ArrayChunk<T, Chunk, Stump>
+where
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
+    T: Eq,
 {
 }
 
-impl<T, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Clone for ArrayChunk<T, CHUNK, STUMP>
+impl<T, Chunk, Stump> Clone for ArrayChunk<T, Chunk, Stump>
 where
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
         match self {
             ArrayChunk::Chunk(chunk, _) => {
-                let chunk_clone: CHUNK =
+                let chunk_clone: Chunk =
                     try_init_from_iterator(chunk.as_slice().iter().cloned()).unwrap();
                 ArrayChunk::Chunk(chunk_clone, PhantomData)
             }
             ArrayChunk::Stump(stump, _) => {
-                let stump_clone: STUMP =
+                let stump_clone: Stump =
                     try_init_from_iterator(stump.as_slice().iter().cloned()).unwrap();
                 ArrayChunk::Stump(stump_clone, PhantomData)
             }
@@ -759,17 +814,23 @@ where
 /// let array = [1, 2, 3, 4, 5, 6, 7, 8];
 /// let _chunks: ArrayChunks<_, _, [_; 3], [_; 2]> = ArrayChunks::new(array);
 /// ```
-pub struct ArrayChunks<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
+pub struct ArrayChunks<T, A, Chunk, Stump>
+where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
 {
     iter: ArrayIntoIterator<T, A>,
     has_stump: bool,
-    _chunk_pd: PhantomData<CHUNK>,
-    _stump_pd: PhantomData<STUMP>,
+    _chunk_pd: PhantomData<Chunk>,
+    _stump_pd: PhantomData<Stump>,
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Debug
-    for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> Debug for ArrayChunks<T, A, Chunk, Stump>
 where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -782,9 +843,11 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> PartialEq
-    for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> PartialEq for ArrayChunks<T, A, Chunk, Stump>
 where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -792,16 +855,20 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Eq
-    for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> Eq for ArrayChunks<T, A, Chunk, Stump>
 where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: Eq,
 {
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Clone
-    for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> Clone for ArrayChunks<T, A, Chunk, Stump>
 where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
@@ -814,8 +881,11 @@ where
     }
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
-    ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> ArrayChunks<T, A, Chunk, Stump>
+where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
 {
     /// Creates a new instance of `ArrayChunks` iterator.
     ///
@@ -829,11 +899,11 @@ impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>
     /// Though currently this function panics if chunk size is 0 and/or stump size
     /// is not valid, this behavior will be changed to perform these checks
     /// at compile time, when this will become possible.
-    pub fn new(array: A) -> ArrayChunks<T, A, CHUNK, STUMP> {
-        let chunk_length = length_of::<T, CHUNK>();
+    pub fn new(array: A) -> ArrayChunks<T, A, Chunk, Stump> {
+        let chunk_length = length_of::<T, Chunk>();
         assert_ne!(chunk_length, 0);
         let array_length = length_of::<T, A>();
-        let stump_length = length_of::<T, STUMP>();
+        let stump_length = length_of::<T, Stump>();
         assert_eq!(
             array_length % chunk_length,
             stump_length,
@@ -844,7 +914,7 @@ impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>
         let iter = ArrayIntoIterator::new(array);
 
         let (elements_remain, _) = iter.size_hint();
-        let has_stump = elements_remain % length_of::<T, CHUNK>() > 0;
+        let has_stump = elements_remain % length_of::<T, Chunk>() > 0;
 
         ArrayChunks {
             iter,
@@ -857,28 +927,31 @@ impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>
     fn items_remain(&self) -> usize {
         let (elements_remain, _) = self.iter.size_hint();
         if self.has_stump {
-            elements_remain / length_of::<T, CHUNK>() + 1
+            elements_remain / length_of::<T, Chunk>() + 1
         } else {
-            elements_remain / length_of::<T, CHUNK>()
+            elements_remain / length_of::<T, Chunk>()
         }
     }
 
     fn has_chunks(&self) -> bool {
         let (elements_remain, _) = self.iter.size_hint();
-        elements_remain / length_of::<T, CHUNK>() > 0
+        elements_remain / length_of::<T, Chunk>() > 0
     }
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>> Iterator
-    for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> Iterator for ArrayChunks<T, A, Chunk, Stump>
+where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
 {
-    type Item = ArrayChunk<T, CHUNK, STUMP>;
+    type Item = ArrayChunk<T, Chunk, Stump>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.has_chunks() {
-            let chunk: CHUNK = try_init_from_iterator(self.iter.by_ref()).unwrap();
+            let chunk: Chunk = try_init_from_iterator(self.iter.by_ref()).unwrap();
             Some(ArrayChunk::Chunk(chunk, PhantomData))
         } else if self.has_stump {
-            let stump: STUMP = try_init_from_iterator(self.iter.by_ref()).unwrap();
+            let stump: Stump = try_init_from_iterator(self.iter.by_ref()).unwrap();
             self.has_stump = false;
             Some(ArrayChunk::Stump(stump, PhantomData))
         } else {
@@ -904,17 +977,20 @@ impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>
     }
 }
 
-impl<T, A: FixedSizeArray<T>, CHUNK: FixedSizeArray<T>, STUMP: FixedSizeArray<T>>
-    DoubleEndedIterator for ArrayChunks<T, A, CHUNK, STUMP>
+impl<T, A, Chunk, Stump> DoubleEndedIterator for ArrayChunks<T, A, Chunk, Stump>
+where
+    A: FixedSizeArray<T>,
+    Chunk: FixedSizeArray<T>,
+    Stump: FixedSizeArray<T>,
 {
     fn next_back(&mut self) -> Option<<Self as Iterator>::Item> {
         if self.has_stump {
-            let mut stump: STUMP = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
+            let mut stump: Stump = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
             stump.as_mut_slice().reverse();
             self.has_stump = false;
             Some(ArrayChunk::Stump(stump, PhantomData))
         } else if self.has_chunks() {
-            let mut chunk: CHUNK = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
+            let mut chunk: Chunk = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
             chunk.as_mut_slice().reverse();
             Some(ArrayChunk::Chunk(chunk, PhantomData))
         } else {
