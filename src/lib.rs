@@ -390,13 +390,13 @@ where
 /// ```rust
 /// use array_tools;
 ///
-/// let array: [u64; 7] = array_tools::indexed_init_with(|idx| {
+/// let array: [u64; 7] = array_tools::init_by_index_with(|idx| {
 ///     idx as u64 * 2
 /// });
 ///
 /// assert_eq!(array, [0, 2, 4, 6, 8, 10, 12]);
 /// ```
-pub fn indexed_init_with<T, A, F>(mut initializer_fn: F) -> A
+pub fn init_by_index_with<T, A, F>(mut initializer_fn: F) -> A
 where
     A: FixedSizeArray<T>,
     F: FnMut(usize) -> T,
@@ -408,6 +408,21 @@ where
         idx += 1
     }
     deque.try_extract_array().unwrap()
+}
+
+#[deprecated(
+    since = "0.2.10",
+    note = "Function `indexed_init_with` was renamed into `init_by_index_with`. \
+            This alias will exist for some time to preserve \
+            backward compatibility."
+)]
+/// Alias for [`init_by_index_with`](crate::init_by_index_with).
+pub fn indexed_init_with<T, A, F>(initializer_fn: F) -> A
+where
+    A: FixedSizeArray<T>,
+    F: FnMut(usize) -> T,
+{
+    init_by_index_with(initializer_fn)
 }
 
 /// Returns the length of array.
@@ -481,7 +496,7 @@ where
         "Sum of outputs' lengths is not equal to length of input."
     );
 
-    let mut iter = ArrayIntoIterator::new(array);
+    let mut iter = IntoIter::new(array);
     let left: L = try_init_from_iterator(iter.by_ref()).unwrap();
     let right: R = try_init_from_iterator(iter.by_ref()).unwrap();
     (left, right)
@@ -528,8 +543,8 @@ where
         left.as_slice().len() + right.as_slice().len(),
         "Sum of inputs' lengths is not equal to output length."
     );
-    let left_iter = ArrayIntoIterator::new(left);
-    let right_iter = ArrayIntoIterator::new(right);
+    let left_iter = IntoIter::new(left);
+    let right_iter = IntoIter::new(right);
     try_init_from_iterator(left_iter.chain(right_iter)).unwrap()
 }
 
@@ -549,20 +564,29 @@ where
 /// struct Foo(u32);
 ///
 /// let array = [Foo(1), Foo(2), Foo(3)];
-/// let mut iter = array_tools::ArrayIntoIterator::new(array);
+/// let mut iter = array_tools::IntoIter::new(array);
 /// assert_eq!(iter.next(), Some(Foo(1)));
 /// assert_eq!(iter.next(), Some(Foo(2)));
 /// assert_eq!(iter.next(), Some(Foo(3)));
 /// assert_eq!(iter.next(), None);
 /// ```
-pub struct ArrayIntoIterator<T, A>
+pub struct IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
 {
     deque: FixedCapacityDequeLike<T, A>,
 }
 
-impl<T, A> PartialEq for ArrayIntoIterator<T, A>
+#[deprecated(
+    since = "0.2.10",
+    note = "Structure `ArrayIntoIterator` was renamed into `IntoIter`. \
+            This alias will exist for some time to preserve \
+            backward compatibility."
+)]
+/// Alias for [`IntoIter`](crate::IntoIter).
+pub type ArrayIntoIterator<T, A> = IntoIter<T, A>;
+
+impl<T, A> PartialEq for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
     T: PartialEq,
@@ -572,49 +596,49 @@ where
     }
 }
 
-impl<T, A> Eq for ArrayIntoIterator<T, A>
+impl<T, A> Eq for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
     T: Eq,
 {
 }
 
-impl<T, A> Clone for ArrayIntoIterator<T, A>
+impl<T, A> Clone for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
-        ArrayIntoIterator {
+        IntoIter {
             deque: self.deque.clone(),
         }
     }
 }
 
-impl<T, A> Debug for ArrayIntoIterator<T, A>
+impl<T, A> Debug for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ArrayIntoIterator")
+        f.debug_struct("IntoIter")
             .field("deque", &self.deque)
             .finish()
     }
 }
 
-impl<T, A> ArrayIntoIterator<T, A>
+impl<T, A> IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
 {
-    pub fn new(array: A) -> ArrayIntoIterator<T, A> {
-        ArrayIntoIterator {
+    pub fn new(array: A) -> IntoIter<T, A> {
+        IntoIter {
             deque: FixedCapacityDequeLike::from_array(array),
         }
     }
 }
 
-impl<T, A> Iterator for ArrayIntoIterator<T, A>
+impl<T, A> Iterator for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
 {
@@ -644,7 +668,7 @@ where
     }
 }
 
-impl<T, A> DoubleEndedIterator for ArrayIntoIterator<T, A>
+impl<T, A> DoubleEndedIterator for IntoIter<T, A>
 where
     A: FixedSizeArray<T>,
 {
@@ -653,12 +677,12 @@ where
     }
 }
 
-/// An item of [`ArrayChunks`](crate::ArrayChunks) iterator.
+/// An item of [`Chunks`](crate::Chunks) iterator.
 ///
-/// See [`ArrayChunks`](crate::ArrayChunks) documentation.
+/// See [`Chunks`](crate::Chunks) documentation.
 ///
 /// Each variant contains `PhantomData`, but it should be ignored completely.
-pub enum ArrayChunk<T, C, S>
+pub enum Chunk<T, C, S>
 where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
@@ -669,7 +693,7 @@ where
     Stump(S, PhantomData<T>),
 }
 
-impl<T, C, S> Debug for ArrayChunk<T, C, S>
+impl<T, C, S> Debug for Chunk<T, C, S>
 where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
@@ -677,12 +701,12 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ArrayChunk::Chunk(chunk, pd) => f
+            Chunk::Chunk(chunk, pd) => f
                 .debug_tuple("Chunk")
                 .field(&chunk.as_slice())
                 .field(&pd)
                 .finish(),
-            ArrayChunk::Stump(stump, pd) => f
+            Chunk::Stump(stump, pd) => f
                 .debug_tuple("Stump")
                 .field(&stump.as_slice())
                 .field(&pd)
@@ -691,7 +715,7 @@ where
     }
 }
 
-impl<T, C, S> PartialEq for ArrayChunk<T, C, S>
+impl<T, C, S> PartialEq for Chunk<T, C, S>
 where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
@@ -699,12 +723,12 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (ArrayChunk::Chunk(chunk, _), ArrayChunk::Chunk(other_chunk, _))
+            (Chunk::Chunk(chunk, _), Chunk::Chunk(other_chunk, _))
                 if chunk.as_slice() == other_chunk.as_slice() =>
             {
                 true
             }
-            (ArrayChunk::Stump(stump, _), ArrayChunk::Stump(other_stump, _))
+            (Chunk::Stump(stump, _), Chunk::Stump(other_stump, _))
                 if stump.as_slice() == other_stump.as_slice() =>
             {
                 true
@@ -714,7 +738,7 @@ where
     }
 }
 
-impl<T, C, S> Eq for ArrayChunk<T, C, S>
+impl<T, C, S> Eq for Chunk<T, C, S>
 where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
@@ -722,7 +746,7 @@ where
 {
 }
 
-impl<T, C, S> Clone for ArrayChunk<T, C, S>
+impl<T, C, S> Clone for Chunk<T, C, S>
 where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
@@ -730,19 +754,28 @@ where
 {
     fn clone(&self) -> Self {
         match self {
-            ArrayChunk::Chunk(chunk, _) => {
+            Chunk::Chunk(chunk, _) => {
                 let chunk_clone: C =
                     try_init_from_iterator(chunk.as_slice().iter().cloned()).unwrap();
-                ArrayChunk::Chunk(chunk_clone, PhantomData)
+                Chunk::Chunk(chunk_clone, PhantomData)
             }
-            ArrayChunk::Stump(stump, _) => {
+            Chunk::Stump(stump, _) => {
                 let stump_clone: S =
                     try_init_from_iterator(stump.as_slice().iter().cloned()).unwrap();
-                ArrayChunk::Stump(stump_clone, PhantomData)
+                Chunk::Stump(stump_clone, PhantomData)
             }
         }
     }
 }
+
+#[deprecated(
+    since = "0.2.10",
+    note = "Structure `ArrayChunk` was renamed into `Chunk`. \
+            This alias will exist for some time to preserve \
+            backward compatibility."
+)]
+/// Alias for [`Chunk`](crate::Chunk).
+pub type ArrayChunk<T, C, S> = Chunk<T, C, S>;
 
 /// A consuming iterator over non-overlaping subarrays of equal size.
 ///
@@ -774,59 +807,68 @@ where
 ///
 /// Case without "stump".
 /// ```rust
-/// use array_tools::{ArrayChunk, ArrayChunks};
+/// use array_tools::{Chunk, Chunks};
 /// use core::marker::PhantomData;
 ///
 /// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
 ///
 /// // Divide array `[u64; 8]` into `[u64; 2]` chunks. It can be divided evenly,
 /// // so there will be no stump.
-/// let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 2], [u64; 0]> = ArrayChunks::new(array);
+/// let mut chunks: Chunks<u64, [u64; 8], [u64; 2], [u64; 0]> = Chunks::new(array);
 ///
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1u64, 2], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([3u64, 4], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([5u64, 6], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([7u64, 8], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([5u64, 6], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8], PhantomData)));
 /// assert_eq!(chunks.next(), None);
 /// ```
 ///
 /// Case with "stump".
 /// ```rust
-/// use array_tools::{ArrayChunk, ArrayChunks};
+/// use array_tools::{Chunk, Chunks};
 /// use core::marker::PhantomData;
 ///
 /// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
 ///
 /// // Divide array `[u64; 8]` into `[u64; 3]` chunks. It can't be divided evenly, so last item
 /// // will be stump of type `[u64; 2]`.
-/// let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array);
+/// let mut chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
 ///
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([1u64, 2, 3], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Chunk([4u64, 5, 6], PhantomData)));
-/// assert_eq!(chunks.next(), Some(ArrayChunk::Stump([7u64, 8], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
 /// assert_eq!(chunks.next(), None);
 /// ```
 ///
 /// Actually, most generic parameters may be ommited:
 /// ```rust
-/// use array_tools::ArrayChunks;
+/// use array_tools::Chunks;
 ///
 /// let array = [1, 2, 3, 4, 5, 6, 7, 8];
-/// let _chunks: ArrayChunks<_, _, [_; 3], [_; 2]> = ArrayChunks::new(array);
+/// let _chunks: Chunks<_, _, [_; 3], [_; 2]> = Chunks::new(array);
 /// ```
-pub struct ArrayChunks<T, A, C, S>
+pub struct Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
 {
-    iter: ArrayIntoIterator<T, A>,
+    iter: IntoIter<T, A>,
     has_stump: bool,
     _chunk_pd: PhantomData<C>,
     _stump_pd: PhantomData<S>,
 }
 
-impl<T, A, C, S> Debug for ArrayChunks<T, A, C, S>
+#[deprecated(
+    since = "0.2.10",
+    note = "Structure `ArrayChunks` was renamed into `Chunks`. \
+            This alias will exist for some time to preserve \
+            backward compatibility."
+)]
+/// Alias for [`Chunks`](crate::Chunks).
+pub type ArrayChunks<T, A, C, S> = Chunks<T, A, C, S>;
+
+impl<T, A, C, S> Debug for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
@@ -834,7 +876,7 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ArrayChunks")
+        f.debug_struct("Chunks")
             .field("iter", &self.iter)
             .field("has_stump", &self.has_stump)
             .field("_chunk_pd", &self._chunk_pd)
@@ -843,7 +885,7 @@ where
     }
 }
 
-impl<T, A, C, S> PartialEq for ArrayChunks<T, A, C, S>
+impl<T, A, C, S> PartialEq for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
@@ -855,7 +897,7 @@ where
     }
 }
 
-impl<T, A, C, S> Eq for ArrayChunks<T, A, C, S>
+impl<T, A, C, S> Eq for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
@@ -864,7 +906,7 @@ where
 {
 }
 
-impl<T, A, C, S> Clone for ArrayChunks<T, A, C, S>
+impl<T, A, C, S> Clone for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
@@ -872,7 +914,7 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        ArrayChunks {
+        Chunks {
             iter: self.iter.clone(),
             has_stump: self.has_stump,
             _chunk_pd: PhantomData,
@@ -881,13 +923,13 @@ where
     }
 }
 
-impl<T, A, C, S> ArrayChunks<T, A, C, S>
+impl<T, A, C, S> Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
 {
-    /// Creates a new instance of [`ArrayChunks`](crate::ArrayChunks) iterator.
+    /// Creates a new instance of [`Chunks`](crate::Chunks) iterator.
     ///
     /// # Panics
     ///
@@ -899,7 +941,7 @@ where
     /// Though currently this function panics if chunk size is 0 and/or stump size
     /// is not valid, this behavior will be changed to perform these checks
     /// at compile time, when this will become possible.
-    pub fn new(array: A) -> ArrayChunks<T, A, C, S> {
+    pub fn new(array: A) -> Chunks<T, A, C, S> {
         let chunk_length = length_of::<T, C>();
         assert_ne!(chunk_length, 0);
         let array_length = length_of::<T, A>();
@@ -911,12 +953,12 @@ where
             stump_length
         );
 
-        let iter = ArrayIntoIterator::new(array);
+        let iter = IntoIter::new(array);
 
         let (elements_remain, _) = iter.size_hint();
         let has_stump = elements_remain % length_of::<T, C>() > 0;
 
-        ArrayChunks {
+        Chunks {
             iter,
             has_stump,
             _chunk_pd: PhantomData,
@@ -939,21 +981,21 @@ where
     }
 }
 
-impl<T, A, C, S> Iterator for ArrayChunks<T, A, C, S>
+impl<T, A, C, S> Iterator for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
 {
-    type Item = ArrayChunk<T, C, S>;
+    type Item = Chunk<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.has_chunks() {
             let chunk: C = try_init_from_iterator(self.iter.by_ref()).unwrap();
-            Some(ArrayChunk::Chunk(chunk, PhantomData))
+            Some(Chunk::Chunk(chunk, PhantomData))
         } else if self.has_stump {
             let stump: S = try_init_from_iterator(self.iter.by_ref()).unwrap();
             self.has_stump = false;
-            Some(ArrayChunk::Stump(stump, PhantomData))
+            Some(Chunk::Stump(stump, PhantomData))
         } else {
             None
         }
@@ -977,7 +1019,7 @@ where
     }
 }
 
-impl<T, A, C, S> DoubleEndedIterator for ArrayChunks<T, A, C, S>
+impl<T, A, C, S> DoubleEndedIterator for Chunks<T, A, C, S>
 where
     A: FixedSizeArray<T>,
     C: FixedSizeArray<T>,
@@ -988,11 +1030,11 @@ where
             let mut stump: S = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
             stump.as_mut_slice().reverse();
             self.has_stump = false;
-            Some(ArrayChunk::Stump(stump, PhantomData))
+            Some(Chunk::Stump(stump, PhantomData))
         } else if self.has_chunks() {
             let mut chunk: C = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
             chunk.as_mut_slice().reverse();
-            Some(ArrayChunk::Chunk(chunk, PhantomData))
+            Some(Chunk::Chunk(chunk, PhantomData))
         } else {
             None
         }
@@ -1021,7 +1063,7 @@ mod tests {
 
     #[test]
     fn array_into_iterator() {
-        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]);
+        let mut iter = super::IntoIter::new([1, 2, 3, 4, 5]);
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(3));
@@ -1032,7 +1074,7 @@ mod tests {
 
     #[test]
     fn array_into_iterator_reverse() {
-        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]).rev();
+        let mut iter = super::IntoIter::new([1, 2, 3, 4, 5]).rev();
         assert_eq!(iter.next(), Some(5));
         assert_eq!(iter.next(), Some(4));
         assert_eq!(iter.next(), Some(3));
@@ -1043,7 +1085,7 @@ mod tests {
 
     #[test]
     fn array_into_iterator_take_from_two_sides() {
-        let mut iter = super::ArrayIntoIterator::new([1, 2, 3, 4, 5]);
+        let mut iter = super::IntoIter::new([1, 2, 3, 4, 5]);
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next_back(), Some(5));
         assert_eq!(iter.next(), Some(2));
@@ -1056,14 +1098,14 @@ mod tests {
     #[test]
     fn array_into_iterator_next() {
         let array = [1, 2, 3, 4, 5, 6, 7];
-        let mut iter = super::ArrayIntoIterator::new(array);
+        let mut iter = super::IntoIter::new(array);
         assert_eq!(iter.next(), Some(1));
     }
 
     #[test]
     fn array_into_iterator_size_hint() {
         let array = [1, 2, 3, 4, 5, 6, 7];
-        let mut iter = super::ArrayIntoIterator::new(array);
+        let mut iter = super::IntoIter::new(array);
         assert_eq!(iter.size_hint(), (7, Some(7)));
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.size_hint(), (6, Some(6)));
@@ -1072,21 +1114,21 @@ mod tests {
     #[test]
     fn array_into_iterator_count() {
         let array = [1, 2, 3, 4, 5, 6, 7];
-        let iter = super::ArrayIntoIterator::new(array);
+        let iter = super::IntoIter::new(array);
         assert_eq!(iter.count(), 7);
     }
 
     #[test]
     fn array_into_iterator_last() {
         let array = [1, 2, 3, 4, 5, 6, 7];
-        let iter = super::ArrayIntoIterator::new(array);
+        let iter = super::IntoIter::new(array);
         assert_eq!(iter.last(), Some(7));
     }
 
     #[test]
     fn array_into_iterator_nth() {
         let array = [1, 2, 3, 4, 5, 6, 7];
-        let mut iter = super::ArrayIntoIterator::new(array);
+        let mut iter = super::IntoIter::new(array);
         assert_eq!(iter.nth(5), Some(6));
     }
 
@@ -1115,19 +1157,19 @@ mod tests {
     }
 
     #[test]
-    fn indexed_init_with_fn() {
+    fn init_by_index_with_fn() {
         fn initializer(idx: usize) -> u64 {
             (idx % 2) as u64
         }
 
-        let array: [u64; 7] = super::indexed_init_with(initializer);
+        let array: [u64; 7] = super::init_by_index_with(initializer);
 
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
 
     #[test]
-    fn indexed_init_with_closure() {
-        let array: [u64; 7] = super::indexed_init_with(|idx| (idx % 2) as u64);
+    fn init_by_index_with_closure() {
+        let array: [u64; 7] = super::init_by_index_with(|idx| (idx % 2) as u64);
 
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
@@ -1229,218 +1271,150 @@ mod tests {
     }
 
     #[test]
-    fn array_chunks_with_stump() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_with_stump() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let mut chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2, 3], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([4u64, 5, 6], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Stump([7u64, 8], PhantomData))
-        );
+        let mut chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn array_chunks_without_stump() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_without_stump() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: ArrayChunks<u64, [u64; 9], [u64; 3], [u64; 0]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2, 3], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([4u64, 5, 6], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([7u64, 8, 9], PhantomData))
-        );
+        let mut chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn array_chunks_with_stump_rev() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_with_stump_rev() {
+        use super::{Chunk, Chunks};
         use core::iter::Rev;
         use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let mut chunks: Rev<ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]>> =
-            ArrayChunks::new(array).rev();
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Stump([7u64, 8], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([4u64, 5, 6], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2, 3], PhantomData))
-        );
+        let mut chunks: Rev<Chunks<u64, [u64; 8], [u64; 3], [u64; 2]>> = Chunks::new(array).rev();
+        assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn array_chunks_withot_stump_rev() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_withot_stump_rev() {
+        use super::{Chunk, Chunks};
         use core::iter::Rev;
         use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: Rev<ArrayChunks<u64, [u64; 9], [u64; 3], [u64; 0]>> =
-            ArrayChunks::new(array).rev();
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([7u64, 8, 9], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([4u64, 5, 6], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2, 3], PhantomData))
-        );
+        let mut chunks: Rev<Chunks<u64, [u64; 9], [u64; 3], [u64; 0]>> = Chunks::new(array).rev();
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn array_chunks_with_stump_take_from_two_sides_front_first() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_with_stump_take_from_two_sides_front_first() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: ArrayChunks<u64, [u64; 9], [u64; 2], [u64; 1]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2], PhantomData))
-        );
-        assert_eq!(
-            chunks.next_back(),
-            Some(ArrayChunk::Stump([9u64], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([3u64, 4], PhantomData))
-        );
+        let mut chunks: Chunks<u64, [u64; 9], [u64; 2], [u64; 1]> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
+        assert_eq!(chunks.next_back(), Some(Chunk::Stump([9u64], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
         assert_eq!(
             chunks.next_back(),
-            Some(ArrayChunk::Chunk([7u64, 8], PhantomData))
+            Some(Chunk::Chunk([7u64, 8], PhantomData))
         );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([5u64, 6], PhantomData))
-        );
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([5u64, 6], PhantomData)));
         assert_eq!(chunks.next_back(), None);
         assert_eq!(chunks.next(), None);
     }
     #[test]
-    fn array_chunks_with_stump_take_from_two_sides_back_first() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_with_stump_take_from_two_sides_back_first() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: ArrayChunks<u64, [u64; 9], [u64; 2], [u64; 1]> = ArrayChunks::new(array);
+        let mut chunks: Chunks<u64, [u64; 9], [u64; 2], [u64; 1]> = Chunks::new(array);
+        assert_eq!(chunks.next_back(), Some(Chunk::Stump([9u64], PhantomData)));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
         assert_eq!(
             chunks.next_back(),
-            Some(ArrayChunk::Stump([9u64], PhantomData))
+            Some(Chunk::Chunk([7u64, 8], PhantomData))
         );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([1u64, 2], PhantomData))
-        );
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
         assert_eq!(
             chunks.next_back(),
-            Some(ArrayChunk::Chunk([7u64, 8], PhantomData))
-        );
-        assert_eq!(
-            chunks.next(),
-            Some(ArrayChunk::Chunk([3u64, 4], PhantomData))
-        );
-        assert_eq!(
-            chunks.next_back(),
-            Some(ArrayChunk::Chunk([5u64, 6], PhantomData))
+            Some(Chunk::Chunk([5u64, 6], PhantomData))
         );
         assert_eq!(chunks.next(), None);
         assert_eq!(chunks.next_back(), None);
     }
 
     #[test]
-    fn array_chunks_with_stump_size_hint() {
-        use super::ArrayChunks;
+    fn chunks_with_stump_size_hint() {
+        use super::Chunks;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array);
+        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
         assert_eq!(chunks.size_hint(), (3, Some(3)));
     }
 
     #[test]
-    fn array_chunks_without_stump_size_hint() {
-        use super::ArrayChunks;
+    fn chunks_without_stump_size_hint() {
+        use super::Chunks;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: ArrayChunks<u64, [u64; 9], [u64; 3], [u64; 0]> = ArrayChunks::new(array);
+        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
         assert_eq!(chunks.size_hint(), (3, Some(3)));
     }
 
     #[test]
-    fn array_chunks_with_stump_count() {
-        use super::ArrayChunks;
+    fn chunks_with_stump_count() {
+        use super::Chunks;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array);
+        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
         assert_eq!(chunks.count(), 3);
     }
 
     #[test]
-    fn array_chunks_without_stump_count() {
-        use super::ArrayChunks;
+    fn chunks_without_stump_count() {
+        use super::Chunks;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: ArrayChunks<u64, [u64; 9], [u64; 3], [u64; 0]> = ArrayChunks::new(array);
+        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
         assert_eq!(chunks.count(), 3);
     }
 
     #[test]
-    fn array_chunks_with_stump_last() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_with_stump_last() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: ArrayChunks<u64, [u64; 8], [u64; 3], [u64; 2]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.last(),
-            Some(ArrayChunk::Stump([7u64, 8], PhantomData))
-        );
+        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
+        assert_eq!(chunks.last(), Some(Chunk::Stump([7u64, 8], PhantomData)));
     }
 
     #[test]
-    fn array_chunks_without_stump_last() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_without_stump_last() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: ArrayChunks<u64, [u64; 9], [u64; 3], [u64; 0]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.last(),
-            Some(ArrayChunk::Chunk([7u64, 8, 9], PhantomData))
-        );
+        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
+        assert_eq!(chunks.last(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
     }
 
     #[test]
-    fn array_chunks_nth() {
-        use super::{ArrayChunk, ArrayChunks};
+    fn chunks_nth() {
+        use super::{Chunk, Chunks};
         use core::marker::PhantomData;
         let array: [u64; 17] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-        let mut chunks: ArrayChunks<u64, [u64; 17], [u64; 2], [u64; 1]> = ArrayChunks::new(array);
-        assert_eq!(
-            chunks.nth(5),
-            Some(ArrayChunk::Chunk([11u64, 12], PhantomData))
-        );
+        let mut chunks: Chunks<u64, [u64; 17], [u64; 2], [u64; 1]> = Chunks::new(array);
+        assert_eq!(chunks.nth(5), Some(Chunk::Chunk([11u64, 12], PhantomData)));
     }
 
     #[test]
@@ -1543,27 +1517,27 @@ mod tests {
 
     #[test]
     fn array_into_iterator_eq() {
-        use super::ArrayIntoIterator;
+        use super::IntoIter;
 
         let a = [1, 2, 3, 4, 5];
         let b = [1, 2, 3, 4, 5];
 
-        let iter_a = ArrayIntoIterator::new(a);
-        let iter_b = ArrayIntoIterator::new(b);
+        let iter_a = IntoIter::new(a);
+        let iter_b = IntoIter::new(b);
 
         assert_eq!(iter_a, iter_b);
     }
 
     #[test]
     fn array_into_iterator_eq_if_items_eq() {
-        use super::ArrayIntoIterator;
+        use super::IntoIter;
         use core::mem;
 
         let a = [1, 2, 3, 4, 5, 6];
         let b = [0, 0, 0, 3, 4, 5];
 
-        let mut iter_a = ArrayIntoIterator::new(a);
-        let mut iter_b = ArrayIntoIterator::new(b);
+        let mut iter_a = IntoIter::new(a);
+        let mut iter_b = IntoIter::new(b);
 
         mem::drop(iter_a.next());
         mem::drop(iter_a.next());
@@ -1578,80 +1552,74 @@ mod tests {
 
     #[test]
     fn array_into_iterator_clone() {
-        use super::ArrayIntoIterator;
+        use super::IntoIter;
         let a = [1, 2, 3, 4, 5];
-        let a_iter = ArrayIntoIterator::new(a);
+        let a_iter = IntoIter::new(a);
         let a_iter_clone = a_iter.clone();
         assert_eq!(a_iter, a_iter_clone);
     }
 
     #[test]
     fn array_chunk_eq_chunk() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
 
         assert_eq!(chunk1, chunk2);
     }
 
     #[test]
     fn array_chunk_eq_stump() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
-        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
+        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
 
         assert_eq!(chunk1, chunk2);
     }
 
     #[test]
     fn array_chunk_ne_stump_and_chunk() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
 
         assert_ne!(chunk1, chunk2);
     }
 
     #[test]
     fn array_chunk_ne_different_chunk_items() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([4, 3, 2, 1], PhantomData);
+        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([4, 3, 2, 1], PhantomData);
 
         assert_ne!(chunk1, chunk2);
     }
 
     #[test]
     fn array_chunk_ne_different_stump_items() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk1: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
-        let chunk2: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([4, 3, 2], PhantomData);
+        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
+        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([4, 3, 2], PhantomData);
 
         assert_ne!(chunk1, chunk2);
     }
 
     #[test]
     fn array_chunk_clone_chunk() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk: ArrayChunk<u64, [u64; 4], [u64; 3]> =
-            ArrayChunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
         let chunk_clone = chunk.clone();
 
         assert_eq!(chunk, chunk_clone);
@@ -1659,25 +1627,25 @@ mod tests {
 
     #[test]
     fn array_chunk_clone_stump() {
-        use super::ArrayChunk;
+        use super::Chunk;
         use core::marker::PhantomData;
 
-        let chunk: ArrayChunk<u64, [u64; 4], [u64; 3]> = ArrayChunk::Stump([1, 2, 3], PhantomData);
+        let chunk: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
         let chunk_clone = chunk.clone();
 
         assert_eq!(chunk, chunk_clone);
     }
 
     #[test]
-    fn array_chunks_eq_case_1() {
-        use super::ArrayChunks;
+    fn chunks_eq_case_1() {
+        use super::Chunks;
         use core::mem;
 
         let a = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
 
         let b = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
 
         assert_eq!(a_chunks, b_chunks);
 
@@ -1698,15 +1666,15 @@ mod tests {
     }
 
     #[test]
-    fn array_chunks_eq_case_2() {
-        use super::ArrayChunks;
+    fn chunks_eq_case_2() {
+        use super::Chunks;
         use core::mem;
 
         let a = [0, 1, 2, 4, 5, 6, 8, 9];
-        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
 
         let b = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
 
         assert_ne!(a_chunks, b_chunks);
 
@@ -1727,15 +1695,15 @@ mod tests {
     }
 
     #[test]
-    fn array_chunks_eq_case_3() {
-        use super::ArrayChunks;
+    fn chunks_eq_case_3() {
+        use super::Chunks;
         use core::mem;
 
         let a = [0, 1, 2, 4, 5, 6, 8, 9];
-        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
 
         let b = [10, 11, 12, 13, 14, 15, 16, 17];
-        let mut b_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
 
         assert_ne!(a_chunks, b_chunks);
 
@@ -1756,12 +1724,12 @@ mod tests {
     }
 
     #[test]
-    fn array_chunks_clone() {
-        use super::ArrayChunks;
+    fn chunks_clone() {
+        use super::Chunks;
         use core::mem;
 
         let a = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut a_chunks = ArrayChunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
         let mut b_chunks = a_chunks.clone();
 
         assert_eq!(a_chunks, b_chunks);
@@ -1783,10 +1751,10 @@ mod tests {
     }
 
     #[test]
-    fn array_chunks_ommit_generic_parameters() {
-        use super::ArrayChunks;
+    fn chunks_ommit_generic_parameters() {
+        use super::Chunks;
 
         let array = [1, 2, 3, 4, 5, 6, 7, 8];
-        let _chunks: ArrayChunks<_, _, [_; 3], [_; 2]> = ArrayChunks::new(array);
+        let _chunks: Chunks<_, _, [_; 3], [_; 2]> = Chunks::new(array);
     }
 }
