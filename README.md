@@ -11,7 +11,7 @@ A collection of tools to help dealing with our beloved ❤️ fixed size arrays 
 
 Requires nightly.
 
-This crate heavely uses `FixedSizeArray` trait, which is currently experimental.
+This crate depends on `FixedSizeArray` trait, which is currently experimental.
 Because of this, crate is experimental as well.
 No other sources of severe breakage should be expected.
 

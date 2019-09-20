@@ -11,7 +11,7 @@
 //!
 //! Requires nightly.
 //!
-//! This crate heavely uses `FixedSizeArray` trait, which is currently experimental.
+//! This crate depends on [FixedSizeArray](core::array::FixedSizeArray) trait, which is currently experimental.
 //! Because of this, crate is experimental as well.
 //! No other sources of severe breakage should be expected.
 //!
@@ -237,11 +237,10 @@ where
 
 /// Attempts to create instance of array from iterator.
 ///
-/// - If iterator yields not enough items to fill array, this function returns `None`.
-/// - If iterator yields enough items, this function returns `Some(array)`.
+/// - If iterator yields not enough items to fill array, this function returns [`None`](core::option::Option::None).
+/// - If iterator yields enough items, this function returns [`Some(array)`](core::option::Option::Some).
 /// - If iterator yields excessive items, this function only takes number of items
 ///   enough to fill array.
-///
 ///
 /// # Panics
 ///
@@ -654,9 +653,9 @@ where
     }
 }
 
-/// An item of `ArrayChunks` iterator.
+/// An item of [`ArrayChunks`](crate::ArrayChunks) iterator.
 ///
-/// See `ArrayChunks` documentation.
+/// See [`ArrayChunks`](crate::ArrayChunks) documentation.
 ///
 /// Each variant contains `PhantomData`, but it should be ignored completely.
 pub enum ArrayChunk<T, C, S>
@@ -888,7 +887,7 @@ where
     C: FixedSizeArray<T>,
     S: FixedSizeArray<T>,
 {
-    /// Creates a new instance of `ArrayChunks` iterator.
+    /// Creates a new instance of [`ArrayChunks`](crate::ArrayChunks) iterator.
     ///
     /// # Panics
     ///
