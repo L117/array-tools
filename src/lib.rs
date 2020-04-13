@@ -235,57 +235,41 @@ where
     }
 }
 
-/// Attempts to create instance of array from iterator.
+/// Attempts to initialize array of `T` with iterator over `T` values.
 ///
-/// - If iterator yields not enough items to fill array, this function returns [`None`](core::option::Option::None).
-/// - If iterator yields enough items, this function returns [`Some(array)`](core::option::Option::Some).
-/// - If iterator yields excessive items, this function only takes number of items
-///   enough to fill array.
+/// - If iterator yields not enough items, this function returns [`None`](core::option::Option::None).
+/// - If iterator yields enough items items to fill array, this function returns [`Some(array)`](core::option::Option::Some).
+/// - If iterator yields excessive items, this function only takes required number of items and returns [`Some(array)`](core::option::Option::Some).
 ///
 /// # Panics
 ///
-/// - Only if iterator does.
+/// - Only if iterator's [`next`](core::iter::Iterator::next) method does.
 ///
 /// # Examples
 ///
-/// Not enough items case.
 /// ```rust
-/// use array_tools::try_init_from_iterator;
+/// use array_tools as art;
 ///
-/// let mut iter = (0..4);
+/// let mut iter = [3i32, 2, 1, 0].iter().copied();
+/// let result: Option<[i32; 5]> = art::init_with_iter(iter.by_ref());
 ///
-/// let maybe_array: Option<[u64; 5]> = try_init_from_iterator(iter.by_ref());
+/// assert_eq!(result, None);
+/// assert_eq!(iter.next(), None);
 ///
-/// assert_eq!(maybe_array, None);
+/// let mut iter = [4i32, 3, 2, 1, 0].iter().copied();
+/// let result: Option<[i32; 5]> = art::init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Some([4i32, 3, 2, 1, 0]));
+/// assert_eq!(iter.next(), None);
+///
+/// let mut iter = [5i32, 4, 3, 2, 1, 0].iter().copied();
+/// let result: Option<[i32; 5]> = art::init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Some([5i32, 4, 3, 2, 1]));
+/// assert_eq!(iter.next(), Some(0));
 /// assert_eq!(iter.next(), None);
 /// ```
-///
-/// Enough items case.
-/// ```rust
-/// use array_tools::try_init_from_iterator;
-///
-/// let mut iter = (0..5);
-///
-/// let maybe_array: Option<[u64; 5]> = try_init_from_iterator(iter.by_ref());
-///
-/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
-/// assert_eq!(iter.next(), None);
-/// ```
-///
-/// Excessive items case.
-/// ```rust
-/// use array_tools::try_init_from_iterator;
-///
-/// let mut iter = (0..7);
-///
-/// let maybe_array: Option<[u32; 5]> = try_init_from_iterator(iter.by_ref());
-///
-/// assert_eq!(maybe_array, Some([0, 1, 2, 3, 4]));
-/// assert_eq!(iter.next(), Some(5));
-/// assert_eq!(iter.next(), Some(6));
-/// assert_eq!(iter.next(), None);
-/// ```
-pub fn try_init_from_iterator<T, A, I>(mut iter: I) -> Option<A>
+pub fn init_with_iter<T, A, I>(mut iter: I) -> Option<A>
 where
     A: FixedSizeArray<T>,
     I: Iterator<Item = T>,
@@ -302,7 +286,87 @@ where
     }
 }
 
-/// Attempts to create instance of array from slice.
+/// Attempts to initialize array of `T` with iterator over `Result<T, E>` values.
+///
+/// This function behaves much like [`init_with_iter`](crate::init_with_iter) does.
+///
+/// - If iterator yields not enough items, this function returns `Ok(None)`.
+/// - If iterator yields enough items items to fill array, this function returns `Ok(Some(array))`.
+/// - If iterator yields excessive items, this function only takes required number of items and
+///   returns `Ok(Some(array))`.
+/// - If iterator yields `Err` before array is fully initialized,
+///   this function stops immediately and returns `Err` obtained from iterator.
+///
+/// # Panics
+///
+/// - Only if iterator's [`next`](core::iter::Iterator::next) method does.
+///
+/// # Examples
+///
+/// ```rust
+/// use array_tools as art;
+///
+/// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// struct MyErr;
+///
+/// let mut iter = [Ok(3i32), Ok(2), Ok(1), Ok(0)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Ok(None));
+/// assert_eq!(iter.next(), None);
+///
+/// let mut iter = [Ok(4i32), Ok(3), Ok(2), Ok(1), Ok(0)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Ok(Some([4i32, 3, 2, 1, 0])));
+/// assert_eq!(iter.next(), None);
+///
+/// let mut iter = [Ok(5i32), Ok(4), Ok(3), Ok(2), Ok(1), Ok(0)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Ok(Some([5i32, 4, 3, 2, 1])));
+/// assert_eq!(iter.next(), Some(Ok(0)));
+/// assert_eq!(iter.next(), None);
+///
+///
+///
+/// let mut iter = [Ok(3i32), Ok(2), Ok(1), Err(MyErr)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Err(MyErr));
+/// assert_eq!(iter.next(), None);
+///
+/// let mut iter = [Ok(4i32), Ok(3), Ok(2), Ok(1), Err(MyErr)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Err(MyErr));
+/// assert_eq!(iter.next(), None);
+///
+/// let mut iter = [Ok(5i32), Ok(4), Ok(3), Ok(2), Ok(1), Err(MyErr)].iter().copied();
+/// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
+///
+/// assert_eq!(result, Ok(Some([5i32, 4, 3, 2, 1])));
+/// assert_eq!(iter.next(), Some(Err(MyErr)));
+/// assert_eq!(iter.next(), None);
+/// ```
+pub fn try_init_with_iter<T, A, I, E>(mut iter: I) -> Result<Option<A>, E>
+where
+    A: FixedSizeArray<T>,
+    I: Iterator<Item = Result<T, E>>,
+{
+    let mut deque = FixedCapacityDequeLike::new();
+    loop {
+        if deque.is_full() {
+            break Ok(deque.try_extract_array());
+        } else if let Some(item) = iter.next() {
+            deque.push_back(item?)
+        } else {
+            break Ok(None);
+        }
+    }
+}
+
+/// Attempts to initialize array of `T` with slice of `T` (`[T]`).
 ///
 /// - If slice length is less than array length, this function returns `None`.
 /// - If slice length is greater or equal to array length, this function returns `Some(array)`.
@@ -313,39 +377,33 @@ where
 ///
 /// Not enough elements case.
 /// ```rust
-/// use array_tools::try_init_from_slice;
+/// use array_tools as art;
 ///
-/// let source = [1, 2, 3, 4, 5, 6];
+/// let slice = &[1i32, 2, 3, 4, 5, 6];
+/// let result: Option<[i32; 8]> = art::init_with_slice(slice);
 ///
-/// let maybe_array: Option<[u64; 8]> = try_init_from_slice(&source);
+/// assert_eq!(result, None);
 ///
-/// assert_eq!(maybe_array, None);
+///
+///
+/// let slice = &[1i32, 2, 3, 4, 5, 6];
+/// let result: Option<[i32; 4]> = art::init_with_slice(slice);
+///
+/// assert_eq!(result, Some([1i32, 2, 3, 4]));
 /// ```
-///
-/// Enough or excessive elements case.
-/// ```rust
-/// use array_tools::try_init_from_slice;
-///
-/// let source = [1, 2, 3, 4, 5, 6];
-///
-/// let maybe_array: Option<[u64; 4]> = try_init_from_slice(&source);
-///
-/// assert_eq!(maybe_array, Some([1, 2, 3, 4]));
-/// ```
-pub fn try_init_from_slice<T, A>(slice: &[T]) -> Option<A>
+pub fn init_with_slice<T, A>(slice: &[T]) -> Option<A>
 where
     A: FixedSizeArray<T>,
     T: Clone,
 {
     if length_of::<T, A>() <= slice.len() {
-        try_init_from_iterator(slice.iter().cloned())
+        init_with_iter(slice.iter().cloned())
     } else {
         None
     }
 }
 
-/// Creates a new array instance filled with values generated by a given function.
-/// This variant expects function without arguments.
+/// Attempts to initialize array with values provided by function.
 ///
 /// # Panics
 ///
@@ -354,10 +412,10 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use array_tools;
+/// use array_tools as art;
 ///
 /// let mut value: u64 = 0;
-/// let array: [u64; 7] = array_tools::init_with(|| {
+/// let array: [u64; 7] = art::init_with(|| {
 ///     let return_value = value;
 ///     value += 1;
 ///     return_value
@@ -377,9 +435,12 @@ where
     deque.try_extract_array().unwrap()
 }
 
-/// Creates a new array instance filled with values generated by a given function.
-/// This variant expects a function with single argument - an index of element
-/// to initialize.
+/// Attempts to initialize array with values provided by function.
+///
+/// This function behaves much like [`init_with`](crate::init_with), but
+/// unlike [`init_with`](crate::init_with) it expects function
+/// that returns [`Result`](core::Result)s. If `Err` is received, this
+/// function stops immediatly and returns received `Err`.
 ///
 /// # Panics
 ///
@@ -388,15 +449,67 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use array_tools;
+/// use array_tools as art;
 ///
-/// let array: [u64; 7] = array_tools::init_by_index_with(|idx| {
+/// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// struct MyErr;
+///
+/// let mut value: u64 = 0;
+/// let result: Result<[u64; 7], MyErr> = art::try_init_with(|| {
+///     let return_value = value;
+///     value += 1;
+///     Ok(return_value)
+/// });
+///
+/// assert_eq!(result, Ok([0, 1, 2, 3, 4, 5, 6]));
+///
+///
+/// let mut value: u64 = 0;
+/// let result: Result<[u64; 7], MyErr> = art::try_init_with(|| {
+///     let return_value = value;
+///     value += 1;
+///     if value != 3 {
+///         Ok(return_value)
+///     } else {
+///         Err(MyErr)
+///     }
+/// });
+///
+/// assert_eq!(result, Err(MyErr));
+/// ```
+pub fn try_init_with<T, A, F, E>(mut initializer_fn: F) -> Result<A, E>
+where
+    A: FixedSizeArray<T>,
+    F: FnMut() -> Result<T, E>,
+{
+    let mut deque = FixedCapacityDequeLike::new();
+    while !deque.is_full() {
+        deque.push_back(initializer_fn()?);
+    }
+    Ok(deque.try_extract_array().unwrap())
+}
+
+/// Attempts to initialize array with values obtained by mapping indices.
+///
+/// Sequentally invokes provided function with each of array's indices and
+/// collects results into array.
+///
+/// # Panics
+///
+/// - Only panics if provided function does.
+///
+/// # Examples
+///
+/// ```rust
+/// use array_tools as art;
+///
+/// let array: [u64; 7] = art::init_with_mapped_idx(|idx| {
 ///     idx as u64 * 2
 /// });
 ///
 /// assert_eq!(array, [0, 2, 4, 6, 8, 10, 12]);
 /// ```
-pub fn init_by_index_with<T, A, F>(mut initializer_fn: F) -> A
+pub fn init_with_mapped_idx<T, A, F>(mut initializer_fn: F) -> A
 where
     A: FixedSizeArray<T>,
     F: FnMut(usize) -> T,
@@ -410,19 +523,54 @@ where
     deque.try_extract_array().unwrap()
 }
 
-#[deprecated(
-    since = "0.2.10",
-    note = "Function `indexed_init_with` was renamed into `init_by_index_with`. \
-            This alias will exist for some time to preserve \
-            backward compatibility."
-)]
-/// Alias for [`init_by_index_with`](crate::init_by_index_with).
-pub fn indexed_init_with<T, A, F>(initializer_fn: F) -> A
+/// Attempts to initialize array with values obtained by mapping indices.
+///
+/// This function behaves much like [`init_with_mapped_idx`](crate::init_with_mapped_idx), but
+/// unlike [`init_with_mapped_idx`](crate::init_with_mapped_idx) it expects function
+/// that returns [`Result`](core::Result)s. If `Err` is received, this
+/// function stops immediatly and returns received `Err`.
+///
+/// # Panics
+///
+/// - Only panics if provided function does.
+///
+/// # Examples
+///
+/// ```rust
+/// use array_tools as art;
+///
+/// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// struct MyErr;
+///
+/// let result: Result<[u64; 7], MyErr> = art::try_init_with_mapped_idx(|idx| {
+///     Ok(idx as u64 * 2)
+/// });
+///
+/// assert_eq!(result, Ok([0, 2, 4, 6, 8, 10, 12]));
+///
+///
+/// let result: Result<[u64; 7], MyErr> = art::try_init_with_mapped_idx(|idx| {
+///     if idx != 3 {
+///         Ok(idx as u64 * 2)
+///     } else {
+///         Err(MyErr)
+///     }
+/// });
+///
+/// assert_eq!(result, Err(MyErr));
+/// ```
+pub fn try_init_with_mapped_idx<T, A, F, E>(mut initializer_fn: F) -> Result<A, E>
 where
     A: FixedSizeArray<T>,
-    F: FnMut(usize) -> T,
+    F: FnMut(usize) -> Result<T, E>,
 {
-    init_by_index_with(initializer_fn)
+    let mut deque = FixedCapacityDequeLike::new();
+    let mut idx = 0;
+    while !deque.is_full() {
+        deque.push_back(initializer_fn(idx)?);
+        idx += 1
+    }
+    Ok(deque.try_extract_array().unwrap())
 }
 
 /// Returns the length of array.
@@ -497,8 +645,8 @@ where
     );
 
     let mut iter = IntoIter::new(array);
-    let left: L = try_init_from_iterator(iter.by_ref()).unwrap();
-    let right: R = try_init_from_iterator(iter.by_ref()).unwrap();
+    let left: L = init_with_iter(iter.by_ref()).unwrap();
+    let right: R = init_with_iter(iter.by_ref()).unwrap();
     (left, right)
 }
 
@@ -545,7 +693,7 @@ where
     );
     let left_iter = IntoIter::new(left);
     let right_iter = IntoIter::new(right);
-    try_init_from_iterator(left_iter.chain(right_iter)).unwrap()
+    init_with_iter(left_iter.chain(right_iter)).unwrap()
 }
 
 /// A consuming iterator over array elements.
@@ -576,15 +724,6 @@ where
 {
     deque: FixedCapacityDequeLike<T, A>,
 }
-
-#[deprecated(
-    since = "0.2.10",
-    note = "Structure `ArrayIntoIterator` was renamed into `IntoIter`. \
-            This alias will exist for some time to preserve \
-            backward compatibility."
-)]
-/// Alias for [`IntoIter`](crate::IntoIter).
-pub type ArrayIntoIterator<T, A> = IntoIter<T, A>;
 
 impl<T, A> PartialEq for IntoIter<T, A>
 where
@@ -755,27 +894,16 @@ where
     fn clone(&self) -> Self {
         match self {
             Chunk::Chunk(chunk, _) => {
-                let chunk_clone: C =
-                    try_init_from_iterator(chunk.as_slice().iter().cloned()).unwrap();
+                let chunk_clone: C = init_with_iter(chunk.as_slice().iter().cloned()).unwrap();
                 Chunk::Chunk(chunk_clone, PhantomData)
             }
             Chunk::Stump(stump, _) => {
-                let stump_clone: S =
-                    try_init_from_iterator(stump.as_slice().iter().cloned()).unwrap();
+                let stump_clone: S = init_with_iter(stump.as_slice().iter().cloned()).unwrap();
                 Chunk::Stump(stump_clone, PhantomData)
             }
         }
     }
 }
-
-#[deprecated(
-    since = "0.2.10",
-    note = "Structure `ArrayChunk` was renamed into `Chunk`. \
-            This alias will exist for some time to preserve \
-            backward compatibility."
-)]
-/// Alias for [`Chunk`](crate::Chunk).
-pub type ArrayChunk<T, C, S> = Chunk<T, C, S>;
 
 /// A consuming iterator over non-overlaping subarrays of equal size.
 ///
@@ -858,15 +986,6 @@ where
     _chunk_pd: PhantomData<C>,
     _stump_pd: PhantomData<S>,
 }
-
-#[deprecated(
-    since = "0.2.10",
-    note = "Structure `ArrayChunks` was renamed into `Chunks`. \
-            This alias will exist for some time to preserve \
-            backward compatibility."
-)]
-/// Alias for [`Chunks`](crate::Chunks).
-pub type ArrayChunks<T, A, C, S> = Chunks<T, A, C, S>;
 
 impl<T, A, C, S> Debug for Chunks<T, A, C, S>
 where
@@ -990,10 +1109,10 @@ where
     type Item = Chunk<T, C, S>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.has_chunks() {
-            let chunk: C = try_init_from_iterator(self.iter.by_ref()).unwrap();
+            let chunk: C = init_with_iter(self.iter.by_ref()).unwrap();
             Some(Chunk::Chunk(chunk, PhantomData))
         } else if self.has_stump {
-            let stump: S = try_init_from_iterator(self.iter.by_ref()).unwrap();
+            let stump: S = init_with_iter(self.iter.by_ref()).unwrap();
             self.has_stump = false;
             Some(Chunk::Stump(stump, PhantomData))
         } else {
@@ -1027,12 +1146,12 @@ where
 {
     fn next_back(&mut self) -> Option<<Self as Iterator>::Item> {
         if self.has_stump {
-            let mut stump: S = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
+            let mut stump: S = init_with_iter(self.iter.by_ref().rev()).unwrap();
             stump.as_mut_slice().reverse();
             self.has_stump = false;
             Some(Chunk::Stump(stump, PhantomData))
         } else if self.has_chunks() {
-            let mut chunk: C = try_init_from_iterator(self.iter.by_ref().rev()).unwrap();
+            let mut chunk: C = init_with_iter(self.iter.by_ref().rev()).unwrap();
             chunk.as_mut_slice().reverse();
             Some(Chunk::Chunk(chunk, PhantomData))
         } else {
@@ -1045,19 +1164,19 @@ where
 mod tests {
     #[test]
     fn not_enough_items() {
-        let maybe_array: Option<[u64; 5]> = super::try_init_from_iterator(1..=4);
+        let maybe_array: Option<[u64; 5]> = super::init_with_iter(1..=4);
         assert_eq!(maybe_array, None);
     }
 
     #[test]
     fn exact_item_count() {
-        let maybe_array: Option<[u64; 5]> = super::try_init_from_iterator(1..=5);
+        let maybe_array: Option<[u64; 5]> = super::init_with_iter(1..=5);
         assert_eq!(maybe_array, Some([1, 2, 3, 4, 5]));
     }
 
     #[test]
     fn too_many_items() {
-        let maybe_array: Option<[u32; 5]> = super::try_init_from_iterator(1..=100);
+        let maybe_array: Option<[u32; 5]> = super::init_with_iter(1..=100);
         assert_eq!(maybe_array, Some([1, 2, 3, 4, 5]));
     }
 
@@ -1162,14 +1281,14 @@ mod tests {
             (idx % 2) as u64
         }
 
-        let array: [u64; 7] = super::init_by_index_with(initializer);
+        let array: [u64; 7] = super::init_with_mapped_idx(initializer);
 
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
 
     #[test]
     fn init_by_index_with_closure() {
-        let array: [u64; 7] = super::init_by_index_with(|idx| (idx % 2) as u64);
+        let array: [u64; 7] = super::init_with_mapped_idx(|idx| (idx % 2) as u64);
 
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
