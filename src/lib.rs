@@ -160,10 +160,6 @@ where
     fn as_slice(&self) -> &[T] {
         unsafe { &(*self.array.as_ptr()).as_slice()[self.begining..self.end] }
     }
-
-    fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { &mut (*self.array.as_mut_ptr()).as_mut_slice()[self.begining..self.end] }
-    }
 }
 
 impl<T, A> Drop for FixedCapacityDequeLike<T, A>
@@ -218,17 +214,21 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut clone = FixedCapacityDequeLike {
+        let mut clone = FixedCapacityDequeLike::<T, A> {
             array: MaybeUninit::uninit(),
             begining: self.begining,
-            end: self.end,
+            end: self.begining,
             _element: PhantomData,
         };
 
-        unsafe {
-            for (src, dst) in self.as_slice().iter().zip(clone.as_mut_slice()) {
+        while clone.end != self.end {
+            let end = clone.end;
+            unsafe {
+                let src = &(*self.array.as_ptr()).as_slice()[end];
+                let dst = &mut (*clone.array.as_mut_ptr()).as_mut_slice()[end];
                 ptr::write(dst, src.clone());
             }
+            clone.end += 1;
         }
 
         clone
@@ -1875,5 +1875,43 @@ mod tests {
 
         let array = [1, 2, 3, 4, 5, 6, 7, 8];
         let _chunks: Chunks<_, _, [_; 3], [_; 2]> = Chunks::new(array);
+    }
+
+    #[test]
+    #[should_panic]
+    fn panicking_clone() {
+        use super::FixedCapacityDequeLike;
+
+        #[derive(Debug, PartialEq, Eq)]
+        struct PanickingThing(usize);
+
+        impl Clone for PanickingThing {
+            fn clone(&self) -> Self {
+                if self.0 == 2 {
+                    panic!("Oh no, my number is 2!");
+                } else {
+                    Self(self.0)
+                }
+            }
+        }
+
+        impl Drop for PanickingThing {
+            fn drop(&mut self) {
+                // Touch potentially uninitialized memory.
+                assert_eq!(self.0, self.0);
+            }
+        }
+
+        let panicking_things = [
+            PanickingThing(0),
+            PanickingThing(1),
+            PanickingThing(2),
+            PanickingThing(3),
+        ];
+        let deque = FixedCapacityDequeLike::from_array(panicking_things);
+        let deque_clone = deque.clone();
+
+        // This is never reached.
+        assert_eq!(deque, deque_clone);
     }
 }
