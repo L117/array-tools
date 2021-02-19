@@ -35,48 +35,41 @@
 //! Contributions of any shape and form are welcome.
 
 #![no_std]
-#![feature(fixed_size_array)]
-use core::array::FixedSizeArray;
 use core::fmt::{self, Debug};
-use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
-struct FixedCapacityDequeLike<T, A>
-where
-    A: FixedSizeArray<T>,
-{
-    array: MaybeUninit<A>,
+struct FixedCapacityDequeLike<T, const N: usize> {
+    array: [MaybeUninit<T>; N],
     begining: usize,
     end: usize,
-    _element: PhantomData<T>,
 }
 
-impl<T, A> FixedCapacityDequeLike<T, A>
-where
-    A: FixedSizeArray<T>,
-{
-    fn new() -> FixedCapacityDequeLike<T, A> {
+impl<T, const N: usize> FixedCapacityDequeLike<T, N> {
+    fn new() -> FixedCapacityDequeLike<T, N> {
         FixedCapacityDequeLike {
-            array: MaybeUninit::uninit(),
+            array: unsafe { MaybeUninit::uninit().assume_init() },
             begining: 0,
             end: 0,
-            _element: PhantomData,
         }
     }
 
-    fn from_array(array: A) -> FixedCapacityDequeLike<T, A> {
-        let length = array.as_slice().len();
-        FixedCapacityDequeLike {
-            array: MaybeUninit::new(array),
-            begining: 0,
-            end: length,
-            _element: PhantomData,
+    fn from_array(array: [T; N]) -> FixedCapacityDequeLike<T, N> {
+        unsafe {
+            let transmuted_array =
+                ptr::read(mem::transmute::<&[T; N], &[MaybeUninit<T>; N]>(&array));
+            mem::forget(array);
+
+            FixedCapacityDequeLike {
+                array: transmuted_array,
+                begining: 0,
+                end: N,
+            }
         }
     }
 
     fn capacity(&self) -> usize {
-        unsafe { (*self.array.as_ptr()).as_slice().len() }
+        N
     }
 
     fn length(&self) -> usize {
@@ -91,13 +84,10 @@ where
         self.length() == self.capacity()
     }
 
-    fn push_back(&mut self, element: T) {
+    fn push_back(&mut self, item: T) {
         if self.end < self.capacity() {
             let item_index = self.end;
-            let slice = unsafe { (*self.array.as_mut_ptr()).as_mut_slice() };
-            unsafe {
-                ptr::write(slice.get_unchecked_mut(item_index), element);
-            }
+            self.array[item_index] = MaybeUninit::new(item);
             self.end += 1;
         } else {
             panic!("No capacity left at the end.");
@@ -105,13 +95,10 @@ where
     }
 
     #[allow(dead_code)]
-    fn push_front(&mut self, element: T) {
+    fn push_front(&mut self, item: T) {
         if self.begining != 0 {
             let item_index = self.begining - 1;
-            let slice = unsafe { (*self.array.as_mut_ptr()).as_mut_slice() };
-            unsafe {
-                ptr::write(slice.get_unchecked_mut(item_index), element);
-            }
+            self.array[item_index] = MaybeUninit::new(item);
             self.begining -= 1;
         } else {
             panic!("No capacity left at the begining.")
@@ -124,8 +111,7 @@ where
         } else {
             let item_index = self.end - 1;
             let item = unsafe {
-                let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(slice.get_unchecked(item_index))
+                mem::replace(&mut self.array[item_index], MaybeUninit::uninit()).assume_init()
             };
             self.end -= 1;
             Some(item)
@@ -138,34 +124,39 @@ where
         } else {
             let item_index = self.begining;
             let item = unsafe {
-                let slice = (*self.array.as_ptr()).as_slice();
-                ptr::read(slice.get_unchecked(item_index))
+                mem::replace(&mut self.array[item_index], MaybeUninit::uninit()).assume_init()
             };
             self.begining += 1;
             Some(item)
         }
     }
 
-    fn try_extract_array(&mut self) -> Option<A> {
+    fn try_extract_array(&mut self) -> Option<[T; N]> {
         if self.length() == self.capacity() {
-            let array_shallow_copy = unsafe { ptr::read(self.array.as_ptr()) };
             self.begining = 0;
             self.end = 0;
-            Some(array_shallow_copy)
+            unsafe {
+                let uninit_array =
+                    mem::replace(&mut self.array, MaybeUninit::uninit().assume_init());
+                let array = ptr::read(mem::transmute::<&[MaybeUninit<T>; N], &[T; N]>(
+                    &uninit_array,
+                ));
+                mem::forget(uninit_array);
+                Some(array)
+            }
         } else {
             None
         }
     }
 
     fn as_slice(&self) -> &[T] {
-        unsafe { &(*self.array.as_ptr()).as_slice()[self.begining..self.end] }
+        unsafe {
+            &mem::transmute::<&[MaybeUninit<T>; N], &[T; N]>(&self.array)[self.begining..self.end]
+        }
     }
 }
 
-impl<T, A> Drop for FixedCapacityDequeLike<T, A>
-where
-    A: FixedSizeArray<T>,
-{
+impl<T, const N: usize> Drop for FixedCapacityDequeLike<T, N> {
     fn drop(&mut self) {
         while let Some(item) = self.pop_back() {
             mem::drop(item);
@@ -173,9 +164,8 @@ where
     }
 }
 
-impl<T, A> Debug for FixedCapacityDequeLike<T, A>
+impl<T, const N: usize> Debug for FixedCapacityDequeLike<T, N>
 where
-    A: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -183,14 +173,12 @@ where
             .field("array", &self.as_slice())
             .field("begining", &self.begining)
             .field("end", &self.end)
-            .field("_element", &self._element)
             .finish()
     }
 }
 
-impl<T, A> PartialEq for FixedCapacityDequeLike<T, A>
+impl<T, const N: usize> PartialEq for FixedCapacityDequeLike<T, N>
 where
-    A: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -201,32 +189,24 @@ where
     }
 }
 
-impl<T, A> Eq for FixedCapacityDequeLike<T, A>
-where
-    A: FixedSizeArray<T>,
-    T: Eq,
-{
-}
+impl<T, const N: usize> Eq for FixedCapacityDequeLike<T, N> where T: Eq {}
 
-impl<T, A> Clone for FixedCapacityDequeLike<T, A>
+impl<T, const N: usize> Clone for FixedCapacityDequeLike<T, N>
 where
-    A: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut clone = FixedCapacityDequeLike::<T, A> {
-            array: MaybeUninit::uninit(),
+        let mut clone = FixedCapacityDequeLike {
+            array: unsafe { MaybeUninit::uninit().assume_init() },
             begining: self.begining,
             end: self.begining,
-            _element: PhantomData,
         };
 
         while clone.end != self.end {
             let end = clone.end;
             unsafe {
-                let src = &(*self.array.as_ptr()).as_slice()[end];
-                let dst = &mut (*clone.array.as_mut_ptr()).as_mut_slice()[end];
-                ptr::write(dst, src.clone());
+                let src: &T = &(*self.array[end].as_ptr());
+                clone.array[end] = MaybeUninit::new(src.clone());
             }
             clone.end += 1;
         }
@@ -234,6 +214,8 @@ where
         clone
     }
 }
+
+/*
 
 /// Attempts to initialize array of `T` with iterator over `T` values.
 ///
@@ -1159,9 +1141,11 @@ where
         }
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
+    /*
     #[test]
     fn not_enough_items() {
         let maybe_array: Option<[u64; 5]> = super::init_with_iter(1..=4);
@@ -1535,11 +1519,11 @@ mod tests {
         let mut chunks: Chunks<u64, [u64; 17], [u64; 2], [u64; 1]> = Chunks::new(array);
         assert_eq!(chunks.nth(5), Some(Chunk::Chunk([11u64, 12], PhantomData)));
     }
-
+    */
     #[test]
     fn fixed_capacity_deque_like_eq() {
         use super::FixedCapacityDequeLike;
-        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque1.push_back(1);
         deque1.push_back(2);
         deque1.push_back(3);
@@ -1548,7 +1532,7 @@ mod tests {
         deque1.pop_front();
         deque1.pop_front();
 
-        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque2.push_back(1);
         deque2.push_back(2);
         deque2.push_back(3);
@@ -1564,8 +1548,8 @@ mod tests {
     fn fixed_capacity_deque_like_eq_empty() {
         use super::FixedCapacityDequeLike;
 
-        let deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
-        let deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
 
         assert_eq!(deque1, deque2);
     }
@@ -1574,11 +1558,11 @@ mod tests {
     fn fixed_capacity_deque_like_not_eq_different_items() {
         use super::FixedCapacityDequeLike;
 
-        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque1.push_back(1);
         deque1.push_back(2);
 
-        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque2.push_back(2);
         deque1.push_back(3);
 
@@ -1589,13 +1573,13 @@ mod tests {
     fn fixed_capacity_deque_like_not_eq_different_offsets() {
         use super::FixedCapacityDequeLike;
 
-        let mut deque1: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque1.push_back(0);
         deque1.push_back(1);
         deque1.push_back(2);
         deque1.pop_back();
 
-        let mut deque2: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque2.push_back(1);
         deque1.push_back(2);
 
@@ -1606,7 +1590,7 @@ mod tests {
     fn fixed_capacity_deque_like_clone_no_offset() {
         use super::FixedCapacityDequeLike;
 
-        let mut deque: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque.push_back(1);
         deque.push_back(2);
         deque.push_back(3);
@@ -1620,7 +1604,7 @@ mod tests {
     fn fixed_capacity_deque_like_clone_with_offset() {
         use super::FixedCapacityDequeLike;
 
-        let mut deque: FixedCapacityDequeLike<u64, [u64; 10]> = FixedCapacityDequeLike::new();
+        let mut deque: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
         deque.push_back(1);
         deque.push_back(2);
         deque.push_back(3);
@@ -1634,6 +1618,7 @@ mod tests {
         assert_eq!(deque, clone);
     }
 
+    /*
     #[test]
     fn array_into_iterator_eq() {
         use super::IntoIter;
@@ -1914,4 +1899,5 @@ mod tests {
         // This is never reached.
         assert_eq!(deque, deque_clone);
     }
+    */
 }
