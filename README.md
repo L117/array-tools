@@ -5,31 +5,26 @@
 [![Build Status](https://travis-ci.com/L117/array-tools.svg?branch=master)](https://travis-ci.com/L117/array-tools)
 [![Build status](https://ci.appveyor.com/api/projects/status/9f4ctfoat9i9h86w?svg=true)](https://ci.appveyor.com/project/L117/array-tools)
 
-A collection of tools to help dealing with our beloved ❤️ fixed size arrays (Including generic contexts). 
+A collection of tools that make it easier to work with arrays.
 
-## Stability notice
+All currently supported features are `no_std` compatible.
 
-Requires nightly.
+```rust
+use array_tools as at;
 
-This crate depends on `FixedSizeArray` trait, which is currently experimental.
-Because of this, crate is experimental as well.
-No other sources of severe breakage should be expected.
+let left: [usize; 4] = at::init_with_mapped_idx(|idx| idx + 1);
+let right: [usize; 3] = at::init_with_iter(5..8).unwrap();
 
-## Features
+let joined: [usize; 7] = at::join(left, right);
 
-- **Metafeature**: all features below should work for arrays of **any** size.
-- Initialization with iterator.
-- Initialization with function (with or without index as argument).
-- Consuming iterator.
-- Consuming chunks iterator.
-- Consuming split.
-- Consuming join.
-- No dependency on `std` and no heap allocations, thanks to underlaying fixed-capacity stack-allocated deque-like structure.
+let (left, right): ([usize; 2], [usize; 5]) = at::split(joined);
 
-## Examples
+assert_eq!(left, [1, 2]);
+assert_eq!(right, [3, 4, 5, 6, 7]);
+```
 
-See [documentation](https://docs.rs/array-tools) for examples, it covers most if not all use cases.
+### License
 
-## Contributing
+Licensed under the terms of either Apache 2.0 or MIT license.
 
-Contributions of any shape and form are welcome.
+

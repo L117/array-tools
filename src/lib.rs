@@ -5,62 +5,55 @@
 //! [![Build Status](https://travis-ci.com/L117/array-tools.svg?branch=master)](https://travis-ci.com/L117/array-tools)
 //! [![Build status](https://ci.appveyor.com/api/projects/status/9f4ctfoat9i9h86w?svg=true)](https://ci.appveyor.com/project/L117/array-tools)
 //!
-//! A collection of tools to help dealing with our beloved ❤️ fixed size arrays (Including generic contexts).
+//! A collection of tools that make it easier to work with arrays.
 //!
-//! ## Stability notice
+//! All currently supported features are `no_std` compatible.
 //!
-//! Requires nightly.
+//! ```rust
+//! use array_tools as at;
 //!
-//! This crate depends on [FixedSizeArray](core::array::FixedSizeArray) trait, which is currently experimental.
-//! Because of this, crate is experimental as well.
-//! No other sources of severe breakage should be expected.
+//! let left: [usize; 4] = at::init_with_mapped_idx(|idx| idx + 1);
+//! let right: [usize; 3] = at::init_with_iter(5..8).unwrap();
 //!
-//! ## Features
+//! let joined: [usize; 7] = at::join(left, right);
 //!
-//! - **Metafeature**: all features below should work for arrays of **any** size.
-//! - Initialization with iterator.
-//! - Initialization with function (with or without index as argument).
-//! - Consuming iterator.
-//! - Consuming chunks iterator.
-//! - Consuming split.
-//! - Consuming join.
-//! - No dependency on `std` and no heap allocations, thanks to underlaying fixed-capacity stack-allocated deque-like structure.
+//! let (left, right): ([usize; 2], [usize; 5]) = at::split(joined);
 //!
-//! ## Examples
+//! assert_eq!(left, [1, 2]);
+//! assert_eq!(right, [3, 4, 5, 6, 7]);
+//! ```
 //!
-//! See [documentation](https://docs.rs/array-tools) for examples, it covers most if not all use cases.
+//! ### License
 //!
-//! ## Contributing
-//!
-//! Contributions of any shape and form are welcome.
+//! Licensed under the terms of either Apache 2.0 or MIT license.
 
 #![no_std]
 use core::fmt::{self, Debug};
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
-struct FixedCapacityDequeLike<T, const N: usize> {
+struct DequeLike<T, const N: usize> {
     array: [MaybeUninit<T>; N],
     begining: usize,
     end: usize,
 }
 
-impl<T, const N: usize> FixedCapacityDequeLike<T, N> {
-    fn new() -> FixedCapacityDequeLike<T, N> {
-        FixedCapacityDequeLike {
+impl<T, const N: usize> DequeLike<T, N> {
+    fn new() -> DequeLike<T, N> {
+        DequeLike {
             array: unsafe { MaybeUninit::uninit().assume_init() },
             begining: 0,
             end: 0,
         }
     }
 
-    fn from_array(array: [T; N]) -> FixedCapacityDequeLike<T, N> {
+    fn from_array(array: [T; N]) -> DequeLike<T, N> {
         unsafe {
             let transmuted_array =
                 ptr::read(mem::transmute::<&[T; N], &[MaybeUninit<T>; N]>(&array));
             mem::forget(array);
 
-            FixedCapacityDequeLike {
+            DequeLike {
                 array: transmuted_array,
                 begining: 0,
                 end: N,
@@ -156,7 +149,7 @@ impl<T, const N: usize> FixedCapacityDequeLike<T, N> {
     }
 }
 
-impl<T, const N: usize> Drop for FixedCapacityDequeLike<T, N> {
+impl<T, const N: usize> Drop for DequeLike<T, N> {
     fn drop(&mut self) {
         while let Some(item) = self.pop_back() {
             mem::drop(item);
@@ -164,12 +157,12 @@ impl<T, const N: usize> Drop for FixedCapacityDequeLike<T, N> {
     }
 }
 
-impl<T, const N: usize> Debug for FixedCapacityDequeLike<T, N>
+impl<T, const N: usize> Debug for DequeLike<T, N>
 where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FixedCapacityDequeLike")
+        f.debug_struct("DequeLike")
             .field("array", &self.as_slice())
             .field("begining", &self.begining)
             .field("end", &self.end)
@@ -177,7 +170,7 @@ where
     }
 }
 
-impl<T, const N: usize> PartialEq for FixedCapacityDequeLike<T, N>
+impl<T, const N: usize> PartialEq for DequeLike<T, N>
 where
     T: PartialEq,
 {
@@ -189,14 +182,14 @@ where
     }
 }
 
-impl<T, const N: usize> Eq for FixedCapacityDequeLike<T, N> where T: Eq {}
+impl<T, const N: usize> Eq for DequeLike<T, N> where T: Eq {}
 
-impl<T, const N: usize> Clone for FixedCapacityDequeLike<T, N>
+impl<T, const N: usize> Clone for DequeLike<T, N>
 where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut clone = FixedCapacityDequeLike {
+        let mut clone = DequeLike {
             array: unsafe { MaybeUninit::uninit().assume_init() },
             begining: self.begining,
             end: self.begining,
@@ -215,17 +208,11 @@ where
     }
 }
 
-/*
-
-/// Attempts to initialize array of `T` with iterator over `T` values.
+/// Initializes array `[T; N]` with items obtained form iterator.
 ///
-/// - If iterator yields not enough items, this function returns [`None`](core::option::Option::None).
-/// - If iterator yields enough items items to fill array, this function returns [`Some(array)`](core::option::Option::Some).
-/// - If iterator yields excessive items, this function only takes required number of items and returns [`Some(array)`](core::option::Option::Some).
+/// Collects first `N` items from iterator and builds the array. Item order is preserved.
 ///
-/// # Panics
-///
-/// - Only if iterator's [`next`](core::iter::Iterator::next) method does.
+/// If iterator yields `None` before `N` items are collected, all previously collected items are dropped and `None` is returned.
 ///
 /// # Examples
 ///
@@ -251,12 +238,11 @@ where
 /// assert_eq!(iter.next(), Some(0));
 /// assert_eq!(iter.next(), None);
 /// ```
-pub fn init_with_iter<T, A, I>(mut iter: I) -> Option<A>
+pub fn init_with_iter<I, T, const N: usize>(mut iter: I) -> Option<[T; N]>
 where
-    A: FixedSizeArray<T>,
     I: Iterator<Item = T>,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     loop {
         if deque.is_full() {
             break deque.try_extract_array();
@@ -268,20 +254,13 @@ where
     }
 }
 
-/// Attempts to initialize array of `T` with iterator over `Result<T, E>` values.
+/// Initializes array `[T; N]` with items form iterator over `Result`s.
 ///
-/// This function behaves much like [`init_with_iter`](crate::init_with_iter) does.
+/// Collects first `N` items from iterator and builds the array. Item order is preserved.
 ///
-/// - If iterator yields not enough items, this function returns `Ok(None)`.
-/// - If iterator yields enough items items to fill array, this function returns `Ok(Some(array))`.
-/// - If iterator yields excessive items, this function only takes required number of items and
-///   returns `Ok(Some(array))`.
-/// - If iterator yields `Err` before array is fully initialized,
-///   this function stops immediately and returns `Err` obtained from iterator.
+/// If iterator yields `None` before `N` items are collected, all previously collected items are dropped and `Ok(None)` is returned.
 ///
-/// # Panics
-///
-/// - Only if iterator's [`next`](core::iter::Iterator::next) method does.
+/// If iterator yields `Some(Errr(_))`, all previously collected items are dropped and `Err(_)` is returned.
 ///
 /// # Examples
 ///
@@ -311,7 +290,6 @@ where
 /// assert_eq!(iter.next(), None);
 ///
 ///
-///
 /// let mut iter = [Ok(3i32), Ok(2), Ok(1), Err(MyErr)].iter().copied();
 /// let result: Result<Option<[i32; 5]>, MyErr> = art::try_init_with_iter(iter.by_ref());
 ///
@@ -331,12 +309,11 @@ where
 /// assert_eq!(iter.next(), Some(Err(MyErr)));
 /// assert_eq!(iter.next(), None);
 /// ```
-pub fn try_init_with_iter<T, A, I, E>(mut iter: I) -> Result<Option<A>, E>
+pub fn try_init_with_iter<I, T, E, const N: usize>(mut iter: I) -> Result<Option<[T; N]>, E>
 where
-    A: FixedSizeArray<T>,
     I: Iterator<Item = Result<T, E>>,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     loop {
         if deque.is_full() {
             break Ok(deque.try_extract_array());
@@ -348,16 +325,12 @@ where
     }
 }
 
-/// Attempts to initialize array of `T` with slice of `T` (`[T]`).
+/// Initializes array `[T; N]` with values cloned form slice.
 ///
-/// - If slice length is less than array length, this function returns `None`.
-/// - If slice length is greater or equal to array length, this function returns `Some(array)`.
-///
-/// This function *clones* slice elements.
+/// Clones first `N` items from slice and builds the array.
 ///
 /// # Examples
 ///
-/// Not enough elements case.
 /// ```rust
 /// use array_tools as art;
 ///
@@ -367,29 +340,25 @@ where
 /// assert_eq!(result, None);
 ///
 ///
-///
 /// let slice = &[1i32, 2, 3, 4, 5, 6];
 /// let result: Option<[i32; 4]> = art::init_with_slice(slice);
 ///
 /// assert_eq!(result, Some([1i32, 2, 3, 4]));
 /// ```
-pub fn init_with_slice<T, A>(slice: &[T]) -> Option<A>
+pub fn init_with_slice<T, const N: usize>(slice: &[T]) -> Option<[T; N]>
 where
-    A: FixedSizeArray<T>,
     T: Clone,
 {
-    if length_of::<T, A>() <= slice.len() {
+    if N <= slice.len() {
         init_with_iter(slice.iter().cloned())
     } else {
         None
     }
 }
 
-/// Attempts to initialize array with values provided by function.
+/// Initializes array `[T; N]` with values obtained by repeatedly calling a function.
 ///
-/// # Panics
-///
-/// - Only panics if provided function does.
+/// Repeatedly calls provided function `N` times and collects items to build the array. Item order is preserved.
 ///
 /// # Examples
 ///
@@ -405,28 +374,22 @@ where
 ///
 /// assert_eq!(array, [0, 1, 2, 3, 4, 5, 6]);
 /// ```
-pub fn init_with<T, A, F>(mut initializer_fn: F) -> A
+pub fn init_with<F, T, const N: usize>(mut initializer_fn: F) -> [T; N]
 where
-    A: FixedSizeArray<T>,
     F: FnMut() -> T,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     while !deque.is_full() {
         deque.push_back(initializer_fn());
     }
     deque.try_extract_array().unwrap()
 }
 
-/// Attempts to initialize array with values provided by function.
+/// Initializes array `[T; N]` with values obtained by repeatedly calling a function.
 ///
-/// This function behaves much like [`init_with`](crate::init_with), but
-/// unlike [`init_with`](crate::init_with) it expects function
-/// that returns [`Result`](core::Result)s. If `Err` is received, this
-/// function stops immediatly and returns received `Err`.
+/// Repeatedly calls provided function `N` times and collects items to build the array. Item order is preserved.
 ///
-/// # Panics
-///
-/// - Only panics if provided function does.
+/// If provided function returns `Err(_)`, all previously collected items are dropped and `Err(_)` is returned.
 ///
 /// # Examples
 ///
@@ -459,26 +422,20 @@ where
 ///
 /// assert_eq!(result, Err(MyErr));
 /// ```
-pub fn try_init_with<T, A, F, E>(mut initializer_fn: F) -> Result<A, E>
+pub fn try_init_with<F, E, T, const N: usize>(mut initializer_fn: F) -> Result<[T; N], E>
 where
-    A: FixedSizeArray<T>,
     F: FnMut() -> Result<T, E>,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     while !deque.is_full() {
         deque.push_back(initializer_fn()?);
     }
     Ok(deque.try_extract_array().unwrap())
 }
 
-/// Attempts to initialize array with values obtained by mapping indices.
+/// Initializes array `[T; N]` with values obtained by repeatedly calling a function with index.
 ///
-/// Sequentally invokes provided function with each of array's indices and
-/// collects results into array.
-///
-/// # Panics
-///
-/// - Only panics if provided function does.
+/// Repeatedly calls provided function `N` times with item index as argument and collects items to build the array.
 ///
 /// # Examples
 ///
@@ -491,12 +448,11 @@ where
 ///
 /// assert_eq!(array, [0, 2, 4, 6, 8, 10, 12]);
 /// ```
-pub fn init_with_mapped_idx<T, A, F>(mut initializer_fn: F) -> A
+pub fn init_with_mapped_idx<F, T, const N: usize>(mut initializer_fn: F) -> [T; N]
 where
-    A: FixedSizeArray<T>,
     F: FnMut(usize) -> T,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     let mut idx = 0;
     while !deque.is_full() {
         deque.push_back(initializer_fn(idx));
@@ -505,16 +461,11 @@ where
     deque.try_extract_array().unwrap()
 }
 
-/// Attempts to initialize array with values obtained by mapping indices.
+/// Initializes array `[T; N]` with values obtained by repeatedly calling a function with index.
 ///
-/// This function behaves much like [`init_with_mapped_idx`](crate::init_with_mapped_idx), but
-/// unlike [`init_with_mapped_idx`](crate::init_with_mapped_idx) it expects function
-/// that returns [`Result`](core::Result)s. If `Err` is received, this
-/// function stops immediatly and returns received `Err`.
+/// Repeatedly calls provided function `N` times with item index as argument and collects items to build the array.
 ///
-/// # Panics
-///
-/// - Only panics if provided function does.
+/// If provided function returns `Err(_)`, all previously collected items are dropped and `Err(_)` is returned.
 ///
 /// # Examples
 ///
@@ -541,12 +492,11 @@ where
 ///
 /// assert_eq!(result, Err(MyErr));
 /// ```
-pub fn try_init_with_mapped_idx<T, A, F, E>(mut initializer_fn: F) -> Result<A, E>
+pub fn try_init_with_mapped_idx<F, E, T, const N: usize>(mut initializer_fn: F) -> Result<[T; N], E>
 where
-    A: FixedSizeArray<T>,
     F: FnMut(usize) -> Result<T, E>,
 {
-    let mut deque = FixedCapacityDequeLike::new();
+    let mut deque = DequeLike::new();
     let mut idx = 0;
     while !deque.is_full() {
         deque.push_back(initializer_fn(idx)?);
@@ -555,53 +505,11 @@ where
     Ok(deque.try_extract_array().unwrap())
 }
 
-/// Returns the length of array.
-///
-/// Though it is not much useful when concrete array type is given and it's
-/// size is known, it may come in handy when dealing with arrays hidden behind
-/// `FixedSizeArray` in generic contexts.
-///
-/// # Examples
-///
-/// ```rust
-/// use array_tools::length_of;
-///
-/// let length = length_of::<u64, [u64; 7]>();
-/// assert_eq!(length, 7);
-/// ```
-///
-/// # Note
-///
-/// Though currently it seems impossible to covert this one into `const fn`,
-/// this sure will be done when this will become possible.
-pub fn length_of<T, A>() -> usize
-where
-    A: FixedSizeArray<T>,
-{
-    let array: MaybeUninit<A> = MaybeUninit::uninit();
-    unsafe { (*array.as_ptr()).as_slice().len() }
-}
-
-/// Splits array into two subarrays.
-///
-/// Because this function deals with arrays of constant size, it does not
-/// expect any arguments, instead it expects two generic parameters - a two
-/// array types that represent output subarrays. These must have the
-/// same element type that input array does, sum of their lengths must
-/// match exactly that of input array.
-///
-/// Does not perform any cloning operations, only moves values.
+/// Splits array `[T; N]` into two subarrays: `[T; L]` and `[T; R]`.
 ///
 /// # Panics
 ///
-/// Panics if sum of output subarrays' length does not match exactly
-/// the length of input array.
-///
-/// # Note
-///
-/// Though currently it panics if output arrays have incompatible lengths,
-/// this behavior will be changed to perform this check at compile time,
-/// when this will become possible.
+/// If `N != L + R`.
 ///
 /// # Examples
 ///
@@ -614,43 +522,24 @@ where
 /// assert_eq!(left, [1u64, 2]);
 /// assert_eq!(right, [3u64, 4, 5, 6, 7, 8]);
 /// ```
-pub fn split<T, A, L, R>(array: A) -> (L, R)
-where
-    A: FixedSizeArray<T>,
-    L: FixedSizeArray<T>,
-    R: FixedSizeArray<T>,
-{
+pub fn split<T, const N: usize, const L: usize, const R: usize>(array: [T; N]) -> ([T; L], [T; R]) {
     assert_eq!(
-        array.as_slice().len(),
-        length_of::<T, L>() + length_of::<T, R>(),
+        N,
+        L + R,
         "Sum of outputs' lengths is not equal to length of input."
     );
 
     let mut iter = IntoIter::new(array);
-    let left: L = init_with_iter(iter.by_ref()).unwrap();
-    let right: R = init_with_iter(iter.by_ref()).unwrap();
+    let left = init_with_iter(iter.by_ref()).unwrap();
+    let right = init_with_iter(iter.by_ref()).unwrap();
     (left, right)
 }
 
 /// Joins two arrays.
 ///
-/// Creates a new array instance of length equal to sum of input arrays' lengths
-/// and containing elements of `right` array appended to elements of the `left`.
-///
-/// Element types of first, second and output arrays must match. Sum of input
-/// arrays' lengths must match exactly length of output array.
-///
-/// Does not perform any cloning operations, only moves values.
-///
 /// # Panics
 ///
-/// - Panics if output array length is not equal to sum of input arrays' lengths.
-///
-/// # Note
-///
-/// Though currently it panics if output array has incompatible length,
-/// this behavior will be changed to perform this check at compile time,
-/// when this will become possible.
+/// If `N != L + R`.
 ///
 /// # Examples
 ///
@@ -662,15 +551,13 @@ where
 /// let joined: [u64; 8] = array_tools::join(left, right);
 /// assert_eq!(joined, [1u64, 2, 3, 4, 5, 6, 7, 8]);
 /// ```
-pub fn join<T, A, L, R>(left: L, right: R) -> A
-where
-    A: FixedSizeArray<T>,
-    L: FixedSizeArray<T>,
-    R: FixedSizeArray<T>,
-{
+pub fn join<T, const N: usize, const L: usize, const R: usize>(
+    left: [T; L],
+    right: [T; R],
+) -> [T; N] {
     assert_eq!(
-        length_of::<T, A>(),
-        left.as_slice().len() + right.as_slice().len(),
+        N,
+        L + R,
         "Sum of inputs' lengths is not equal to output length."
     );
     let left_iter = IntoIter::new(left);
@@ -678,11 +565,7 @@ where
     init_with_iter(left_iter.chain(right_iter)).unwrap()
 }
 
-/// A consuming iterator over array elements.
-///
-/// Consumes array upon creation and yields it's elements one-by-one.
-///
-/// Does not perform any cloning operations, only moves values.
+/// Consuming iterator over array items.
 ///
 /// # Examples
 ///
@@ -700,16 +583,12 @@ where
 /// assert_eq!(iter.next(), Some(Foo(3)));
 /// assert_eq!(iter.next(), None);
 /// ```
-pub struct IntoIter<T, A>
-where
-    A: FixedSizeArray<T>,
-{
-    deque: FixedCapacityDequeLike<T, A>,
+pub struct IntoIter<T, const N: usize> {
+    deque: DequeLike<T, N>,
 }
 
-impl<T, A> PartialEq for IntoIter<T, A>
+impl<T, const N: usize> PartialEq for IntoIter<T, N>
 where
-    A: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -717,16 +596,10 @@ where
     }
 }
 
-impl<T, A> Eq for IntoIter<T, A>
-where
-    A: FixedSizeArray<T>,
-    T: Eq,
-{
-}
+impl<T, const N: usize> Eq for IntoIter<T, N> where T: Eq {}
 
-impl<T, A> Clone for IntoIter<T, A>
+impl<T, const N: usize> Clone for IntoIter<T, N>
 where
-    A: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
@@ -736,9 +609,8 @@ where
     }
 }
 
-impl<T, A> Debug for IntoIter<T, A>
+impl<T, const N: usize> Debug for IntoIter<T, N>
 where
-    A: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -748,21 +620,15 @@ where
     }
 }
 
-impl<T, A> IntoIter<T, A>
-where
-    A: FixedSizeArray<T>,
-{
-    pub fn new(array: A) -> IntoIter<T, A> {
+impl<T, const N: usize> IntoIter<T, N> {
+    pub fn new(array: [T; N]) -> IntoIter<T, N> {
         IntoIter {
-            deque: FixedCapacityDequeLike::from_array(array),
+            deque: DequeLike::from_array(array),
         }
     }
 }
 
-impl<T, A> Iterator for IntoIter<T, A>
-where
-    A: FixedSizeArray<T>,
-{
+impl<T, const N: usize> Iterator for IntoIter<T, N> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.deque.pop_front()
@@ -789,10 +655,7 @@ where
     }
 }
 
-impl<T, A> DoubleEndedIterator for IntoIter<T, A>
-where
-    A: FixedSizeArray<T>,
-{
+impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
     fn next_back(&mut self) -> Option<T> {
         self.deque.pop_back()
     }
@@ -801,302 +664,199 @@ where
 /// An item of [`Chunks`](crate::Chunks) iterator.
 ///
 /// See [`Chunks`](crate::Chunks) documentation.
-///
-/// Each variant contains `PhantomData`, but it should be ignored completely.
-pub enum Chunk<T, C, S>
-where
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
-{
+pub enum Chunk<T, const CHUNK_LEN: usize, const TAIL_LEN: usize> {
     /// A normal chunk.
-    Chunk(C, PhantomData<T>),
+    Chunk([T; CHUNK_LEN]),
     /// A reaminder that has insufficient length to be a chunk.
-    Stump(S, PhantomData<T>),
+    Tail([T; TAIL_LEN]),
 }
 
-impl<T, C, S> Debug for Chunk<T, C, S>
+impl<T, const CHUNK_LEN: usize, const TAIL_LEN: usize> Debug for Chunk<T, CHUNK_LEN, TAIL_LEN>
 where
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Chunk::Chunk(chunk, pd) => f
-                .debug_tuple("Chunk")
-                .field(&chunk.as_slice())
-                .field(&pd)
-                .finish(),
-            Chunk::Stump(stump, pd) => f
-                .debug_tuple("Stump")
-                .field(&stump.as_slice())
-                .field(&pd)
-                .finish(),
+            Chunk::Chunk(chunk) => f.debug_tuple("Chunk").field(&chunk).finish(),
+            Chunk::Tail(tail) => f.debug_tuple("Tail").field(&tail).finish(),
         }
     }
 }
 
-impl<T, C, S> PartialEq for Chunk<T, C, S>
+impl<T, const CHUNK_LEN: usize, const TAIL_LEN: usize> PartialEq for Chunk<T, CHUNK_LEN, TAIL_LEN>
 where
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Chunk::Chunk(chunk, _), Chunk::Chunk(other_chunk, _))
-                if chunk.as_slice() == other_chunk.as_slice() =>
-            {
-                true
-            }
-            (Chunk::Stump(stump, _), Chunk::Stump(other_stump, _))
-                if stump.as_slice() == other_stump.as_slice() =>
-            {
-                true
-            }
+            (Chunk::Chunk(chunk), Chunk::Chunk(other_chunk)) => chunk == other_chunk,
+            (Chunk::Tail(tail), Chunk::Tail(other_tail)) => tail == other_tail,
             _ => false,
         }
     }
 }
 
-impl<T, C, S> Eq for Chunk<T, C, S>
-where
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
-    T: Eq,
+impl<T, const CHUNK_LEN: usize, const TAIL_LEN: usize> Eq for Chunk<T, CHUNK_LEN, TAIL_LEN> where
+    T: Eq
 {
 }
 
-impl<T, C, S> Clone for Chunk<T, C, S>
+impl<T, const CHUNK_LEN: usize, const TAIL_LEN: usize> Clone for Chunk<T, CHUNK_LEN, TAIL_LEN>
 where
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
-        match self {
-            Chunk::Chunk(chunk, _) => {
-                let chunk_clone: C = init_with_iter(chunk.as_slice().iter().cloned()).unwrap();
-                Chunk::Chunk(chunk_clone, PhantomData)
+        match &self {
+            &Chunk::Chunk(chunk) => {
+                let chunk_clone = init_with_slice(chunk).unwrap();
+                Chunk::Chunk(chunk_clone)
             }
-            Chunk::Stump(stump, _) => {
-                let stump_clone: S = init_with_iter(stump.as_slice().iter().cloned()).unwrap();
-                Chunk::Stump(stump_clone, PhantomData)
+            &Chunk::Tail(tail) => {
+                let tail_clone = init_with_slice(tail).unwrap();
+                Chunk::Tail(tail_clone)
             }
         }
     }
 }
 
-/// A consuming iterator over non-overlaping subarrays of equal size.
+/// By-value iterator over non-overlaping subarrays of equal size.
 ///
 /// Consumes array upon creation and yields subarrays "chunks" of requested size.
 ///
 /// If array can't be divided evenly into chunks, the last yielded item will be
-/// a "stump" - an array of length `input_array_length % chunk_size_length`,
-/// containing what remains at the end.
+/// a "tail" - an array of length `N % CHUNK_LEN`, containing what remains at the end.
 ///
-/// If array can be divided evenly into "chunks", there will be no "stump".
-///
-/// Because this iterator deals with arrays of constant size, it does not
-/// expect chunk size argument, instead it expects four generic parameters:
-/// - Element type.
-/// - Consumed array type.
-/// - Chunk array type.
-/// - Stump array type.
-///
-/// Element type of consumed, chunk and stump array types must match.
-/// Consumed array length could be anything, including zero.
-/// Chunk array length must be non-zero.
-/// In case input array can't be divided evenly into chunks, stump array length
-/// must be `consumed_array_length % chunk_array_length`.
-/// In case input array can be divided evenly, stump array length must be 0.
-///
-/// Does not perform any cloning operations, only moves values.
+/// If array can be divided evenly into "chunks", there will be no "tail".
 ///
 /// # Examples
 ///
-/// Case without "stump".
 /// ```rust
 /// use array_tools::{Chunk, Chunks};
-/// use core::marker::PhantomData;
 ///
 /// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
 ///
 /// // Divide array `[u64; 8]` into `[u64; 2]` chunks. It can be divided evenly,
-/// // so there will be no stump.
-/// let mut chunks: Chunks<u64, [u64; 8], [u64; 2], [u64; 0]> = Chunks::new(array);
+/// // so there will be no tail.
+/// let mut chunks: Chunks<u64, 8, 2, 0> = Chunks::new(array);
 ///
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([5u64, 6], PhantomData)));
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1, 2])));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([3, 4])));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([5, 6])));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([7, 8])));
 /// assert_eq!(chunks.next(), None);
-/// ```
 ///
-/// Case with "stump".
-/// ```rust
-/// use array_tools::{Chunk, Chunks};
-/// use core::marker::PhantomData;
 ///
 /// let array = [1u64, 2, 3, 4, 5, 6, 7, 8];
 ///
 /// // Divide array `[u64; 8]` into `[u64; 3]` chunks. It can't be divided evenly, so last item
-/// // will be stump of type `[u64; 2]`.
-/// let mut chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
+/// // will be tail of type `[u64; 2]`.
+/// let mut chunks: Chunks<u64, 8, 3, 2> = Chunks::new(array);
 ///
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
-/// assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
-/// assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3])));
+/// assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6])));
+/// assert_eq!(chunks.next(), Some(Chunk::Tail([7u64, 8])));
 /// assert_eq!(chunks.next(), None);
 /// ```
-///
-/// Actually, most generic parameters may be ommited:
-/// ```rust
-/// use array_tools::Chunks;
-///
-/// let array = [1, 2, 3, 4, 5, 6, 7, 8];
-/// let _chunks: Chunks<_, _, [_; 3], [_; 2]> = Chunks::new(array);
-/// ```
-pub struct Chunks<T, A, C, S>
-where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
-{
-    iter: IntoIter<T, A>,
-    has_stump: bool,
-    _chunk_pd: PhantomData<C>,
-    _stump_pd: PhantomData<S>,
+pub struct Chunks<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> {
+    iter: IntoIter<T, N>,
+    has_tail: bool,
 }
 
-impl<T, A, C, S> Debug for Chunks<T, A, C, S>
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> Debug
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Chunks")
             .field("iter", &self.iter)
-            .field("has_stump", &self.has_stump)
-            .field("_chunk_pd", &self._chunk_pd)
-            .field("_stump_pd", &self._stump_pd)
+            .field("has_tail", &self.has_tail)
             .finish()
     }
 }
 
-impl<T, A, C, S> PartialEq for Chunks<T, A, C, S>
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> PartialEq
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.iter == other.iter && self.has_stump == other.has_stump
+        self.iter == other.iter && self.has_tail == other.has_tail
     }
 }
 
-impl<T, A, C, S> Eq for Chunks<T, A, C, S>
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> Eq
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: Eq,
 {
 }
 
-impl<T, A, C, S> Clone for Chunks<T, A, C, S>
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> Clone
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
     T: Clone,
 {
     fn clone(&self) -> Self {
         Chunks {
             iter: self.iter.clone(),
-            has_stump: self.has_stump,
-            _chunk_pd: PhantomData,
-            _stump_pd: PhantomData,
+            has_tail: self.has_tail,
         }
     }
 }
 
-impl<T, A, C, S> Chunks<T, A, C, S>
-where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize>
+    Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 {
     /// Creates a new instance of [`Chunks`](crate::Chunks) iterator.
     ///
     /// # Panics
     ///
-    /// - If chunk size is 0.
-    /// - If stump size is not equal to `consumed_array_length % chunk_array_length`.
+    /// If `CHUNK_LEN` is `0`.
     ///
-    /// # Note
-    ///
-    /// Though currently this function panics if chunk size is 0 and/or stump size
-    /// is not valid, this behavior will be changed to perform these checks
-    /// at compile time, when this will become possible.
-    pub fn new(array: A) -> Chunks<T, A, C, S> {
-        let chunk_length = length_of::<T, C>();
-        assert_ne!(chunk_length, 0);
-        let array_length = length_of::<T, A>();
-        let stump_length = length_of::<T, S>();
+    /// If `N % CHUNK_LEN != TAIL_LEN`.
+    pub fn new(array: [T; N]) -> Chunks<T, N, CHUNK_LEN, TAIL_LEN> {
+        assert_ne!(CHUNK_LEN, 0);
         assert_eq!(
-            array_length % chunk_length,
-            stump_length,
-            "Invalid stump length, expected {}.",
-            stump_length
+            N % CHUNK_LEN,
+            TAIL_LEN,
+            "Invalid tail length, expected {}.",
+            TAIL_LEN
         );
 
         let iter = IntoIter::new(array);
+        let has_tail = N % CHUNK_LEN > 0;
 
-        let (elements_remain, _) = iter.size_hint();
-        let has_stump = elements_remain % length_of::<T, C>() > 0;
-
-        Chunks {
-            iter,
-            has_stump,
-            _chunk_pd: PhantomData,
-            _stump_pd: PhantomData,
-        }
+        Chunks { iter, has_tail }
     }
 
     fn items_remain(&self) -> usize {
         let (elements_remain, _) = self.iter.size_hint();
-        if self.has_stump {
-            elements_remain / length_of::<T, C>() + 1
+        if self.has_tail {
+            elements_remain / CHUNK_LEN + 1
         } else {
-            elements_remain / length_of::<T, C>()
+            elements_remain / CHUNK_LEN
         }
     }
 
     fn has_chunks(&self) -> bool {
         let (elements_remain, _) = self.iter.size_hint();
-        elements_remain / length_of::<T, C>() > 0
+        elements_remain / CHUNK_LEN > 0
     }
 }
 
-impl<T, A, C, S> Iterator for Chunks<T, A, C, S>
-where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> Iterator
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 {
-    type Item = Chunk<T, C, S>;
+    type Item = Chunk<T, CHUNK_LEN, TAIL_LEN>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.has_chunks() {
-            let chunk: C = init_with_iter(self.iter.by_ref()).unwrap();
-            Some(Chunk::Chunk(chunk, PhantomData))
-        } else if self.has_stump {
-            let stump: S = init_with_iter(self.iter.by_ref()).unwrap();
-            self.has_stump = false;
-            Some(Chunk::Stump(stump, PhantomData))
+            let chunk = init_with_iter(self.iter.by_ref()).unwrap();
+            Some(Chunk::Chunk(chunk))
+        } else if self.has_tail {
+            let tail = init_with_iter(self.iter.by_ref()).unwrap();
+            self.has_tail = false;
+            Some(Chunk::Tail(tail))
         } else {
             None
         }
@@ -1111,6 +871,7 @@ where
     fn last(mut self) -> Option<Self::Item> {
         self.next_back()
     }
+
     fn nth(&mut self, mut nth: usize) -> Option<Self::Item> {
         while nth > 0 {
             mem::drop(self.next());
@@ -1120,32 +881,28 @@ where
     }
 }
 
-impl<T, A, C, S> DoubleEndedIterator for Chunks<T, A, C, S>
-where
-    A: FixedSizeArray<T>,
-    C: FixedSizeArray<T>,
-    S: FixedSizeArray<T>,
+impl<T, const N: usize, const CHUNK_LEN: usize, const TAIL_LEN: usize> DoubleEndedIterator
+    for Chunks<T, N, CHUNK_LEN, TAIL_LEN>
 {
     fn next_back(&mut self) -> Option<<Self as Iterator>::Item> {
-        if self.has_stump {
-            let mut stump: S = init_with_iter(self.iter.by_ref().rev()).unwrap();
-            stump.as_mut_slice().reverse();
-            self.has_stump = false;
-            Some(Chunk::Stump(stump, PhantomData))
+        if self.has_tail {
+            let mut tail = init_with_iter(self.iter.by_ref().rev()).unwrap();
+            tail.reverse();
+            self.has_tail = false;
+            Some(Chunk::Tail(tail))
         } else if self.has_chunks() {
-            let mut chunk: C = init_with_iter(self.iter.by_ref().rev()).unwrap();
-            chunk.as_mut_slice().reverse();
-            Some(Chunk::Chunk(chunk, PhantomData))
+            let mut chunk = init_with_iter(self.iter.by_ref().rev()).unwrap();
+            chunk.reverse();
+            Some(Chunk::Chunk(chunk))
         } else {
             None
         }
     }
 }
-*/
 
 #[cfg(test)]
 mod tests {
-    /*
+
     #[test]
     fn not_enough_items() {
         let maybe_array: Option<[u64; 5]> = super::init_with_iter(1..=4);
@@ -1277,17 +1034,20 @@ mod tests {
         assert_eq!(array, [0, 1, 0, 1, 0, 1, 0]);
     }
 
+    /*
     #[test]
     fn length_of_empty() {
         let length = super::length_of::<Option<u64>, [Option<u64>; 0]>();
         assert_eq!(length, 0);
     }
 
+
     #[test]
     fn length_of_non_empty() {
         let length = super::length_of::<Option<u64>, [Option<u64>; 7]>();
         assert_eq!(length, 7);
     }
+    */
 
     #[test]
     fn split_okay() {
@@ -1374,156 +1134,139 @@ mod tests {
     }
 
     #[test]
-    fn chunks_with_stump() {
+    fn chunks_with_tail() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let mut chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
+        let mut chunks: Chunks<u64, 8, 3, 2> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6])));
+        assert_eq!(chunks.next(), Some(Chunk::Tail([7u64, 8])));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn chunks_without_stump() {
+    fn chunks_without_tail() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
+        let mut chunks: Chunks<u64, 9, 3, 0> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9])));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn chunks_with_stump_rev() {
+    fn chunks_with_tail_rev() {
         use super::{Chunk, Chunks};
         use core::iter::Rev;
-        use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let mut chunks: Rev<Chunks<u64, [u64; 8], [u64; 3], [u64; 2]>> = Chunks::new(array).rev();
-        assert_eq!(chunks.next(), Some(Chunk::Stump([7u64, 8], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
+        let mut chunks: Rev<Chunks<u64, 8, 3, 2>> = Chunks::new(array).rev();
+        assert_eq!(chunks.next(), Some(Chunk::Tail([7u64, 8])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3])));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn chunks_withot_stump_rev() {
+    fn chunks_withot_tail_rev() {
         use super::{Chunk, Chunks};
         use core::iter::Rev;
-        use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: Rev<Chunks<u64, [u64; 9], [u64; 3], [u64; 0]>> = Chunks::new(array).rev();
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3], PhantomData)));
+        let mut chunks: Rev<Chunks<u64, 9, 3, 0>> = Chunks::new(array).rev();
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([7u64, 8, 9])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([4u64, 5, 6])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2, 3])));
         assert_eq!(chunks.next(), None);
     }
 
     #[test]
-    fn chunks_with_stump_take_from_two_sides_front_first() {
+    fn chunks_with_tail_take_from_two_sides_front_first() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: Chunks<u64, [u64; 9], [u64; 2], [u64; 1]> = Chunks::new(array);
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
-        assert_eq!(chunks.next_back(), Some(Chunk::Stump([9u64], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
-        assert_eq!(
-            chunks.next_back(),
-            Some(Chunk::Chunk([7u64, 8], PhantomData))
-        );
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([5u64, 6], PhantomData)));
+        let mut chunks: Chunks<u64, 9, 2, 1> = Chunks::new(array);
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2])));
+        assert_eq!(chunks.next_back(), Some(Chunk::Tail([9u64])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4])));
+        assert_eq!(chunks.next_back(), Some(Chunk::Chunk([7u64, 8])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([5u64, 6])));
         assert_eq!(chunks.next_back(), None);
         assert_eq!(chunks.next(), None);
     }
+
     #[test]
-    fn chunks_with_stump_take_from_two_sides_back_first() {
+    fn chunks_with_tail_take_from_two_sides_back_first() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut chunks: Chunks<u64, [u64; 9], [u64; 2], [u64; 1]> = Chunks::new(array);
-        assert_eq!(chunks.next_back(), Some(Chunk::Stump([9u64], PhantomData)));
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2], PhantomData)));
-        assert_eq!(
-            chunks.next_back(),
-            Some(Chunk::Chunk([7u64, 8], PhantomData))
-        );
-        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4], PhantomData)));
-        assert_eq!(
-            chunks.next_back(),
-            Some(Chunk::Chunk([5u64, 6], PhantomData))
-        );
+        let mut chunks: Chunks<u64, 9, 2, 1> = Chunks::new(array);
+        assert_eq!(chunks.next_back(), Some(Chunk::Tail([9u64])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([1u64, 2])));
+        assert_eq!(chunks.next_back(), Some(Chunk::Chunk([7u64, 8])));
+        assert_eq!(chunks.next(), Some(Chunk::Chunk([3u64, 4])));
+        assert_eq!(chunks.next_back(), Some(Chunk::Chunk([5u64, 6])));
         assert_eq!(chunks.next(), None);
         assert_eq!(chunks.next_back(), None);
     }
 
     #[test]
-    fn chunks_with_stump_size_hint() {
+    fn chunks_with_tail_size_hint() {
         use super::Chunks;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
+        let chunks: Chunks<u64, 8, 3, 2> = Chunks::new(array);
         assert_eq!(chunks.size_hint(), (3, Some(3)));
     }
 
     #[test]
-    fn chunks_without_stump_size_hint() {
+    fn chunks_without_tail_size_hint() {
         use super::Chunks;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
+        let chunks: Chunks<u64, 9, 3, 0> = Chunks::new(array);
         assert_eq!(chunks.size_hint(), (3, Some(3)));
     }
 
     #[test]
-    fn chunks_with_stump_count() {
+    fn chunks_with_tail_count() {
         use super::Chunks;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
+        let chunks: Chunks<u64, 8, 3, 2> = Chunks::new(array);
         assert_eq!(chunks.count(), 3);
     }
 
     #[test]
-    fn chunks_without_stump_count() {
+    fn chunks_without_tail_count() {
         use super::Chunks;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
+        let chunks: Chunks<u64, 9, 3, 0> = Chunks::new(array);
         assert_eq!(chunks.count(), 3);
     }
 
     #[test]
-    fn chunks_with_stump_last() {
+    fn chunks_with_tail_last() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 8] = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let chunks: Chunks<u64, [u64; 8], [u64; 3], [u64; 2]> = Chunks::new(array);
-        assert_eq!(chunks.last(), Some(Chunk::Stump([7u64, 8], PhantomData)));
+        let chunks: Chunks<u64, 8, 3, 2> = Chunks::new(array);
+        assert_eq!(chunks.last(), Some(Chunk::Tail([7u64, 8])));
     }
 
     #[test]
-    fn chunks_without_stump_last() {
+    fn chunks_without_tail_last() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 9] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let chunks: Chunks<u64, [u64; 9], [u64; 3], [u64; 0]> = Chunks::new(array);
-        assert_eq!(chunks.last(), Some(Chunk::Chunk([7u64, 8, 9], PhantomData)));
+        let chunks: Chunks<u64, 9, 3, 0> = Chunks::new(array);
+        assert_eq!(chunks.last(), Some(Chunk::Chunk([7u64, 8, 9])));
     }
 
     #[test]
     fn chunks_nth() {
         use super::{Chunk, Chunks};
-        use core::marker::PhantomData;
         let array: [u64; 17] = [1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-        let mut chunks: Chunks<u64, [u64; 17], [u64; 2], [u64; 1]> = Chunks::new(array);
-        assert_eq!(chunks.nth(5), Some(Chunk::Chunk([11u64, 12], PhantomData)));
+        let mut chunks: Chunks<u64, 17, 2, 1> = Chunks::new(array);
+        assert_eq!(chunks.nth(5), Some(Chunk::Chunk([11u64, 12])));
     }
-    */
+
     #[test]
     fn fixed_capacity_deque_like_eq() {
-        use super::FixedCapacityDequeLike;
-        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        use super::DequeLike;
+        let mut deque1: DequeLike<u64, 10> = DequeLike::new();
         deque1.push_back(1);
         deque1.push_back(2);
         deque1.push_back(3);
@@ -1532,7 +1275,7 @@ mod tests {
         deque1.pop_front();
         deque1.pop_front();
 
-        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque2: DequeLike<u64, 10> = DequeLike::new();
         deque2.push_back(1);
         deque2.push_back(2);
         deque2.push_back(3);
@@ -1546,23 +1289,23 @@ mod tests {
 
     #[test]
     fn fixed_capacity_deque_like_eq_empty() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
-        let deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
-        let deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let deque1: DequeLike<u64, 10> = DequeLike::new();
+        let deque2: DequeLike<u64, 10> = DequeLike::new();
 
         assert_eq!(deque1, deque2);
     }
 
     #[test]
     fn fixed_capacity_deque_like_not_eq_different_items() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
-        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque1: DequeLike<u64, 10> = DequeLike::new();
         deque1.push_back(1);
         deque1.push_back(2);
 
-        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque2: DequeLike<u64, 10> = DequeLike::new();
         deque2.push_back(2);
         deque1.push_back(3);
 
@@ -1571,15 +1314,15 @@ mod tests {
 
     #[test]
     fn fixed_capacity_deque_like_not_eq_different_offsets() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
-        let mut deque1: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque1: DequeLike<u64, 10> = DequeLike::new();
         deque1.push_back(0);
         deque1.push_back(1);
         deque1.push_back(2);
         deque1.pop_back();
 
-        let mut deque2: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque2: DequeLike<u64, 10> = DequeLike::new();
         deque2.push_back(1);
         deque1.push_back(2);
 
@@ -1588,9 +1331,9 @@ mod tests {
 
     #[test]
     fn fixed_capacity_deque_like_clone_no_offset() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
-        let mut deque: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque: DequeLike<u64, 10> = DequeLike::new();
         deque.push_back(1);
         deque.push_back(2);
         deque.push_back(3);
@@ -1602,9 +1345,9 @@ mod tests {
 
     #[test]
     fn fixed_capacity_deque_like_clone_with_offset() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
-        let mut deque: FixedCapacityDequeLike<u64, 10> = FixedCapacityDequeLike::new();
+        let mut deque: DequeLike<u64, 10> = DequeLike::new();
         deque.push_back(1);
         deque.push_back(2);
         deque.push_back(3);
@@ -1618,7 +1361,6 @@ mod tests {
         assert_eq!(deque, clone);
     }
 
-    /*
     #[test]
     fn array_into_iterator_eq() {
         use super::IntoIter;
@@ -1666,32 +1408,29 @@ mod tests {
     #[test]
     fn array_chunk_eq_chunk() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
-
-        assert_eq!(chunk1, chunk2);
-    }
-
-    #[test]
-    fn array_chunk_eq_stump() {
-        use super::Chunk;
-        use core::marker::PhantomData;
-
-        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
-        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
+        let chunk1: Chunk<u64, 4, 3> = Chunk::Chunk([1, 2, 3, 4]);
+        let chunk2: Chunk<u64, 4, 3> = Chunk::Chunk([1, 2, 3, 4]);
 
         assert_eq!(chunk1, chunk2);
     }
 
     #[test]
-    fn array_chunk_ne_stump_and_chunk() {
+    fn array_chunk_eq_tail() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
+        let chunk1: Chunk<u64, 4, 3> = Chunk::Tail([1, 2, 3]);
+        let chunk2: Chunk<u64, 4, 3> = Chunk::Tail([1, 2, 3]);
+
+        assert_eq!(chunk1, chunk2);
+    }
+
+    #[test]
+    fn array_chunk_ne_tail_and_chunk() {
+        use super::Chunk;
+
+        let chunk1: Chunk<u64, 4, 3> = Chunk::Chunk([1, 2, 3, 4]);
+        let chunk2: Chunk<u64, 4, 3> = Chunk::Tail([1, 2, 3]);
 
         assert_ne!(chunk1, chunk2);
     }
@@ -1699,21 +1438,19 @@ mod tests {
     #[test]
     fn array_chunk_ne_different_chunk_items() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
-        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([4, 3, 2, 1], PhantomData);
+        let chunk1: Chunk<u64, 4, 3> = Chunk::Chunk([1, 2, 3, 4]);
+        let chunk2: Chunk<u64, 4, 3> = Chunk::Chunk([4, 3, 2, 1]);
 
         assert_ne!(chunk1, chunk2);
     }
 
     #[test]
-    fn array_chunk_ne_different_stump_items() {
+    fn array_chunk_ne_different_tail_items() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk1: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
-        let chunk2: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([4, 3, 2], PhantomData);
+        let chunk1: Chunk<u64, 4, 3> = Chunk::Tail([1, 2, 3]);
+        let chunk2: Chunk<u64, 4, 3> = Chunk::Tail([4, 3, 2]);
 
         assert_ne!(chunk1, chunk2);
     }
@@ -1721,9 +1458,8 @@ mod tests {
     #[test]
     fn array_chunk_clone_chunk() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Chunk([1, 2, 3, 4], PhantomData);
+        let chunk: Chunk<u64, 4, 3> = Chunk::Chunk([1, 2, 3, 4]);
         let chunk_clone = chunk.clone();
 
         assert_eq!(chunk, chunk_clone);
@@ -1732,9 +1468,8 @@ mod tests {
     #[test]
     fn array_chunk_clone_stump() {
         use super::Chunk;
-        use core::marker::PhantomData;
 
-        let chunk: Chunk<u64, [u64; 4], [u64; 3]> = Chunk::Stump([1, 2, 3], PhantomData);
+        let chunk: Chunk<u64, 4, 3> = Chunk::Tail([1, 2, 3]);
         let chunk_clone = chunk.clone();
 
         assert_eq!(chunk, chunk_clone);
@@ -1746,10 +1481,10 @@ mod tests {
         use core::mem;
 
         let a = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, 8, 3, 2>::new(a);
 
         let b = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, 8, 3, 2>::new(b);
 
         assert_eq!(a_chunks, b_chunks);
 
@@ -1775,10 +1510,10 @@ mod tests {
         use core::mem;
 
         let a = [0, 1, 2, 4, 5, 6, 8, 9];
-        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, 8, 3, 2>::new(a);
 
         let b = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, 8, 3, 2>::new(b);
 
         assert_ne!(a_chunks, b_chunks);
 
@@ -1804,10 +1539,10 @@ mod tests {
         use core::mem;
 
         let a = [0, 1, 2, 4, 5, 6, 8, 9];
-        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, 8, 3, 2>::new(a);
 
         let b = [10, 11, 12, 13, 14, 15, 16, 17];
-        let mut b_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(b);
+        let mut b_chunks = Chunks::<u64, 8, 3, 2>::new(b);
 
         assert_ne!(a_chunks, b_chunks);
 
@@ -1833,7 +1568,7 @@ mod tests {
         use core::mem;
 
         let a = [1, 2, 3, 4, 5, 6, 7, 8];
-        let mut a_chunks = Chunks::<u64, [u64; 8], [u64; 3], [u64; 2]>::new(a);
+        let mut a_chunks = Chunks::<u64, 8, 3, 2>::new(a);
         let mut b_chunks = a_chunks.clone();
 
         assert_eq!(a_chunks, b_chunks);
@@ -1859,13 +1594,13 @@ mod tests {
         use super::Chunks;
 
         let array = [1, 2, 3, 4, 5, 6, 7, 8];
-        let _chunks: Chunks<_, _, [_; 3], [_; 2]> = Chunks::new(array);
+        let _chunks: Chunks<_, 8, 3, 2> = Chunks::new(array);
     }
 
     #[test]
     #[should_panic]
     fn panicking_clone() {
-        use super::FixedCapacityDequeLike;
+        use super::DequeLike;
 
         #[derive(Debug, PartialEq, Eq)]
         struct PanickingThing(usize);
@@ -1893,11 +1628,10 @@ mod tests {
             PanickingThing(2),
             PanickingThing(3),
         ];
-        let deque = FixedCapacityDequeLike::from_array(panicking_things);
+        let deque = DequeLike::from_array(panicking_things);
         let deque_clone = deque.clone();
 
         // This is never reached.
         assert_eq!(deque, deque_clone);
     }
-    */
 }
